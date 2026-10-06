@@ -14,7 +14,8 @@ import pandas as pd
 
 import geo
 from download_boundary import data_dong_counts
-from utils import DATA_PROC, DONG_MAPPING, MAP_UNITS, add_call_type, add_status, load_official_wait, load_raw, minutes, save_table
+from utils import (DATA_PROC, DONG_MAPPING, MAP_UNITS, add_call_type, add_status, load_official_wait, load_raw, minutes,
+                   official_formula, save_table)
 
 
 def pct(s):
@@ -87,7 +88,6 @@ def check_official(df):
     fl = lambda c: df[c].dt.floor("h")
     r2b = minutes(df.t_request, df.t_board)
     s2b = minutes(df.t_sched, df.t_board)
-    s2b_trunc = minutes(df.t_sched.dt.floor("min"), df.t_board.dt.floor("min"))
     r2end = r2b.fillna(minutes(df.t_request, df.t_cancel))
     cands = [
         ("즉시호출·승차 | 접수→승차 평균 | 접수 시간대", r2b[imm], fl("t_request")[imm], "mean"),
@@ -98,11 +98,11 @@ def check_official(df):
         ("전체·승차 | 예정→승차 평균 | 승차 시간대", s2b, fl("t_board"), "mean"),
         ("전체·승차 | 예정→승차 평균 | 예정 시간대", s2b, fl("t_sched"), "mean"),
         ("전체·승차 | 예정→승차, 음수→0, 평균 | 예정 시간대", s2b.clip(lower=0), fl("t_sched"), "mean"),
-        ("전체·승차 | 예정→승차, 각 시각 분단위 절사, 음수→0, 평균 | 예정 시간대 [채택]", s2b_trunc.clip(lower=0), fl("t_sched"), "mean"),
     ]
+    cands.append(("전체·승차 | 예정→승차, 각 시각 분단위 절사, 음수→0, 평균 | 예정 시간대 [채택]", None, None, "formula"))
     rows = []
     for name, v, k, how in cands:
-        g = v.groupby(k).agg(how).dropna()
+        g = official_formula(df) if how == "formula" else v.groupby(k).agg(how).dropna()
         j = pd.concat([off, g.rename("calc")], axis=1, join="inner")
         d = j["calc"] - j["official"]
         rows.append({"후보 산식": name, "비교 칸 수": len(j), "공식 칸 수": len(off),

@@ -101,6 +101,15 @@ def minutes(a: pd.Series, b: pd.Series) -> pd.Series:
     return (b - a).dt.total_seconds() / 60
 
 
+def official_formula(raw: pd.DataFrame) -> pd.Series:
+    """공식 '시간대별 대기시간평균' 산식 재현(00단계에서 역추정). 공단과 같은 모집단인 원본 전체(제외 전)에 쓴다.
+    승차한 콜(즉시+사전)의 (승차 - 예정): 각 시각을 분 단위로 절사, 음수는 0, 예정 시간대별 평균.
+    공식값과 비교할 때는 결과를 내림(floor)한다."""
+    b = raw[raw["t_board"].notna()]
+    w = minutes(b["t_sched"].dt.floor("min"), b["t_board"].dt.floor("min")).clip(lower=0)
+    return w.groupby(b["t_sched"].dt.floor("h")).mean()
+
+
 def add_status(df: pd.DataFrame) -> pd.DataFrame:
     """배차·승차·취소 기록 조합으로 상태를 정한다 (CLAUDE.md 3-2 표)."""
     disp, board, canc = df["t_dispatch"].notna(), df["t_board"].notna(), df["t_cancel"].notna()
