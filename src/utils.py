@@ -123,6 +123,45 @@ def save_table(df: pd.DataFrame, name: str, index: bool = False) -> Path:
     return p
 
 
+# ---------------------------------------------------------------- 그림 공통
+# 기준 팔레트(라이트, 인쇄용). 범주색은 순서대로만 쓴다: 1 파랑, 2 주황, 3 청록 ...
+COLOR = {
+    "series": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
+    "board": "#2a78d6",      # 승차(배차) 경로 = 슬롯 1
+    "cancel": "#eb6834",     # 취소 = 슬롯 2
+    "neutral": "#898781",    # 기타·불명
+    "surface": "#fcfcfb", "ink": "#0b0b0b", "ink2": "#52514e", "muted": "#898781",
+    "grid": "#e1e0d9", "axis": "#c3c2b7",
+}
+FIG_WIDTH_IN = 16 / 2.54   # 보고서 본문 폭 16cm
+
+
+def apply_style() -> str:
+    """한글 폰트 + 차분한 축·격자. 모든 그림 스크립트가 처음에 부른다."""
+    import matplotlib
+    font = setup_korean_font()
+    matplotlib.rcParams.update({
+        "figure.facecolor": COLOR["surface"], "axes.facecolor": COLOR["surface"], "savefig.facecolor": COLOR["surface"],
+        "axes.edgecolor": COLOR["axis"], "axes.linewidth": 0.8, "axes.labelcolor": COLOR["ink2"],
+        "axes.titlecolor": COLOR["ink"], "axes.spines.top": False, "axes.spines.right": False,
+        "axes.grid": False, "grid.color": COLOR["grid"], "grid.linewidth": 0.6, "grid.linestyle": "-",
+        "xtick.color": COLOR["muted"], "ytick.color": COLOR["muted"], "xtick.labelcolor": COLOR["ink2"],
+        "ytick.labelcolor": COLOR["ink2"], "font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8,
+        "legend.frameon": False, "legend.fontsize": 7.5, "lines.linewidth": 1.6,
+    })
+    return font
+
+
+def save_fig(fig, name: str, source: str = SOURCE_NOTE, note: str | None = None) -> Path:
+    """출처(와 주석)를 왼쪽 아래에 넣고 300dpi PNG로 저장."""
+    text = source if note is None else f"{note}\n{source}"
+    fig.text(0.01, 0.005, text, ha="left", va="bottom", fontsize=6.5, color=COLOR["muted"], linespacing=1.4)
+    p = OUT_FIG / name
+    fig.savefig(p, dpi=300)
+    print(f"  -> {p.relative_to(ROOT)}")
+    return p
+
+
 def setup_korean_font() -> str:
     """matplotlib 한글 폰트(Windows: Malgun Gothic, 없으면 NanumGothic)."""
     import matplotlib

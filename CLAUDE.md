@@ -121,6 +121,10 @@
 **Overall — 접수 → 승차**
 - 사건 1 = 승차
 - 사건 2 = 취소(배차 전 + 배차 후)
+- 사건 3 = 기타 실패(배차 후 미승차·미취소, immediate 599건). **경쟁사건으로 유지한다**(2026-10-06 사용자 결정).
+  - 취소에 합치지 않는다. 실제로 탔는데 승차일시만 빠진 기록일 수 있어, 합치면 포기 수가 부풀려진다.
+  - CIF 그림에서는 생략하고, 표에는 건수와 누적확률을 남긴다.
+  - 민감도 분석으로 "사건 3 제외" 결과를 표에 한 줄 추가한다.
 
 **기타 규칙**
 - **관측 상한:** 접수 후 360분. 그 이후 상태는 중도절단으로 둔다. immediate는 99% 지점이 약 125분이라 영향이 거의 없다.
@@ -139,7 +143,7 @@
 |---|---|---|---|
 | 01 | `01_prepare.py` | 로드, 타입 변환, call_type, Stage 1·2와 Overall 시간·사건 생성, 제외 로그 | `data_processed/calls.parquet`, `outputs/tables/exclusion_log.csv` |
 | 02 | `02_descriptive.py` | 상태 조합표, 시간 분포, 시간대·요일·구별 취소율, 차량구분별 비교 | `outputs/tables/desc_*.csv`, `fig_01_status_flow.png`(접수 → 배차/배차 전 취소 → 승차/배차 후 취소 흐름도) |
-| 03 | `03_official_vs_actual.py` | **공식 시간대별 평균 대기시간**과 탑승내역 재계산값 비교: (a) 승차완료 건 평균, (b) 승차완료 건 중앙값, (c) 취소 포함 "60분 내 승차 확률". 일×시간대 단위로 맞춰 비교 | `fig_02_official_vs_actual.png`, `tables/official_compare.csv` |
+| 03 | `03_official_vs_actual.py` | **공식 시간대별 평균 대기시간**과 탑승내역 재계산값 비교: (a) 승차완료 건 평균, (b) 승차완료 건 중앙값, (c) 취소 포함 "60분 내 승차 확률". 일×시간대 단위로 맞춰 비교. **그림(보고서 첫 장):** "공식값(승차자만) vs 취소 포함 실제"를 시간대별로 나란히 보이고, 공식 산식을 분 단위까지 재현(8,718칸 중 93.8%)했다는 점을 그림 주석에 넣는다(2026-10-06 사용자 요청) | `fig_02_official_vs_actual.png`, `tables/official_compare.csv` |
 | 04 | `04_cif_vs_naive.py` | **naive KM**(취소 = 중도절단, 선행연구 방식)의 1−S(t)와 **Aalen–Johansen 누적발생함수**(승차·취소)를 한 그림에 겹친다. 60분 시점의 차이를 수치로 제시 | `fig_03_naive_vs_cif.png`, `tables/naive_vs_cif_at_t.csv` |
 | 05 | `05_conditional_residual.py` | 이미 기다린 시간 s ∈ {0,15,30,45,60,90}분에서 "다음 30분 내 승차 확률", "다음 30분 내 포기 확률", 남은 대기 중앙값. 시간대 그룹별로 산출 | `fig_04_conditional_residual.png`, `tables/conditional_residual.csv` |
 | 06 | `06_hazard_model.py` | 5분 구간 person-period 데이터, **LightGBM multiclass**(none / dispatch / cancel_before_dispatch). 구간별 원인별 해저드 → CIF와 조건부 잔여대기 복원. 평가와 SHAP | `models/lgbm_stage1.txt`, `fig_05_shap.png`, `tables/model_metrics.csv` |

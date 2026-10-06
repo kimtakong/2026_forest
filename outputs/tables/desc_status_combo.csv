@@ -1,0 +1,12 @@
+﻿call_type,배차,승차,취소,status,건수,비율%,해석
+immediate,O,O,X,boarded,1324308,86.667,승차
+immediate,X,X,O,pre_cancel,143071,9.363,배차 전 취소
+immediate,O,X,O,post_cancel,59992,3.926,배차 후 취소
+immediate,O,X,X,disp_noboard,622,0.041,기타 실패(배차 후 미승차·미취소)
+immediate,O,O,O,boarded,30,0.002,"승차(승차 후 취소 기록, 플래그)"
+immediate,X,X,X,unknown,24,0.002,상태 불명(중도절단)
+scheduled,O,O,X,boarded,152327,78.679,승차
+scheduled,X,X,O,pre_cancel,33565,17.337,배차 전 취소
+scheduled,O,X,O,post_cancel,7609,3.93,배차 후 취소
+scheduled,O,X,X,disp_noboard,100,0.052,기타 실패(배차 후 미승차·미취소)
+scheduled,O,O,O,boarded,4,0.002,"승차(승차 후 취소 기록, 플래그)"
