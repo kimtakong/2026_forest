@@ -14,3 +14,7 @@ desktop.ini
 .vscode/
 .idea/
 ~$*
+
+# --sample 시연 결과(본 결과와 분리)
+outputs/sample/
+models/sample/

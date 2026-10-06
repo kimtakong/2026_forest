@@ -25,9 +25,19 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 | 03 | `src/03_official_vs_actual.py` 공식값 vs 실제(fig_02) | 약 5초 |
 | 04 | `src/04_cif_vs_naive.py` naive KM vs 경쟁위험 CIF(fig_03) | 약 3초 |
 | 05 | `src/05_conditional_residual.py` 조건부 잔여대기(fig_04) | 약 3초 |
-| 합계 | | 약 1분 20초 (첫 실행, CSV 파싱 포함) |
+| 06 | `src/06_hazard_model.py` LightGBM 이산시간 해저드(fig_05, 부록 fig_A2) | 약 7분 |
+| 합계 | | 약 8분 30초 (첫 실행, CSV 파싱 포함) |
 
 \* Windows 11 PC 기준 측정값. 이후 단계가 추가되면 갱신한다.
+
+**06단계 표본과 `--sample`:**
+- 본 실행은 **표본추출 없이 전체**로 학습한다(RAM 63GB PC에서 확인).
+  - 학습(1~8월): 콜 1,003,367건, person-period 4,304,023행
+  - 검증(9월): 콜 137,567건, person-period 727,156행
+  - 테스트(10~12월): 콜 387,113건, 테스트는 언제나 전체
+- 기준선 (b) RandomForest만 학습 구간 승차 콜에서 30만 건을 무작위로 뽑아 학습한다(시드 42).
+- `python run_all.py --sample` 또는 `python src/06_hazard_model.py --sample`은 학습·검증·테스트 콜을 (월 × 시 × 출발구) 층화로 10%만 써서 약 50초에 시연한다.
+  - 결과는 본 결과를 덮어쓰지 않도록 `outputs/sample/`, `models/sample/`에 저장된다.
 
 ## 데이터
 

@@ -30,6 +30,15 @@ DONG_MAPPING = DATA_PROC / "dong_mapping.csv"
 MAP_UNITS = DATA_PROC / "map_units.parquet"
 CANONICAL = OUT_TAB / "canonical_counts.csv"   # 모든 그림·표가 인용하는 기준 건수(01단계에서 한 번만 계산)
 
+# --sample 시연 실행은 본 결과를 덮어쓰지 않도록 outputs/sample/, models/sample/ 에 저장한다(기준 건수표는 그대로 읽음)
+SAMPLE_MODE = "--sample" in sys.argv
+if SAMPLE_MODE:
+    OUT_FIG = ROOT / "outputs" / "sample" / "figures"
+    OUT_TAB = ROOT / "outputs" / "sample" / "tables"
+    MODELS = ROOT / "models" / "sample"
+    for _p in (OUT_FIG, OUT_TAB, MODELS):
+        _p.mkdir(parents=True, exist_ok=True)
+
 # ---------------------------------------------------------------- 상수
 SEED = 42
 OBS_CAP_MIN = 360                 # 관측 상한: 대기 시작 후 360분
@@ -196,4 +205,4 @@ def setup_korean_font() -> str:
 
 
 def parse_sample_flag() -> bool:
-    return "--sample" in sys.argv
+    return SAMPLE_MODE
