@@ -3,6 +3,7 @@
 입력 : data_processed/calls.parquet
 출력 : outputs/tables/desc_*.csv
        outputs/figures/fig_01_status_flow.png  즉시호출 흐름도(접수 -> 배차/배차 전 취소 -> 승차/배차 후 취소)
+       outputs/figures/fig_A1_recall_timing.png  부록: 배차 후 취소 -> 재접수 시각 분포(10분 접수 제한)
 사건은 01단계의 분석 사건 열(E1, E2, E_all, E_all_ab)로 센다. 건수는 canonical_counts.csv와 같아야 한다.
 비율 정의
   취소율        = (배차 전 + 배차 후 취소) / 전체 콜
@@ -246,6 +247,42 @@ def fig_status_flow(f):
     plt.close(fig)
 
 
+RULE_URL = "https://sisul.or.kr/open_content/calltaxi/introduce/obey.jsp"
+
+
+def fig_recall_timing(imm):
+    """부록: 배차 후 취소 -> 같은 조건 재접수까지 걸린 시간(1분 구간). 공단의 '배차 후 취소 시 10분 접수 제한' 규정이 보인다."""
+    import matplotlib.pyplot as plt
+    apply_style()
+    g = imm.loc[imm.is_post & imm.recall_60, "recall_gap_min"]
+    n_post = int(imm.is_post.sum())
+    k = np.floor(g).astype(int).value_counts().reindex(range(60), fill_value=0)
+    spike = int(k.loc[10])
+    fig, ax = plt.subplots(figsize=(FIG_WIDTH_IN, 2.9))
+    fig.subplots_adjust(left=0.09, right=0.98, top=0.76, bottom=0.27)
+    colors = [COLOR["board"] if i == 10 else "#9ec5f4" for i in k.index]
+    ax.bar(k.index + 0.5, k.values, width=0.8, color=colors, zorder=2)
+    ax.axvline(10, color=COLOR["ink2"], lw=0.8, zorder=3)
+    ax.text(11.6, spike * 0.97, f"취소 후 10~11분: {spike:,}건\n(재접수의 {spike / len(g) * 100:.0f}%)",
+            fontsize=7.2, color=COLOR["ink"], va="top")
+    ax.text(9.6, spike * 0.97, "접수 제한\n10분", fontsize=7, color=COLOR["ink2"], va="top", ha="right")
+    ax.set_xlim(0, 60)
+    ax.set_xticks(range(0, 61, 10))
+    ax.set_xlabel("배차 후 취소 → 같은 조건 재접수까지 걸린 시간(분)")
+    ax.set_ylabel("건수")
+    ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.grid(axis="y"); ax.set_axisbelow(True); ax.tick_params(length=0)
+    fig.text(0.01, 0.97, "배차 후 취소한 사람은 '10분 접수 제한'이 풀리자마자 다시 불렀다",
+             fontsize=10, fontweight="bold", color=COLOR["ink"], va="top")
+    fig.text(0.01, 0.875, f"즉시호출 배차 후 취소 {n_post:,}건 중 60분 안에 같은 조건으로 다시 부른 {len(g):,}건의 재접수 시각",
+             fontsize=7.8, color=COLOR["ink2"], va="top")
+    note = ("주: 같은 조건 = 같은 출발동·목적동·장애유형(이용자 ID가 없어 쓴 대리 기준). "
+            "규정: \"차량배차 후 취소 시에는 10분 간 콜 접수가 제한됩니다\"\n"
+            f"    (서울시설공단 장애인콜택시 이용수칙, {RULE_URL}, 2026-10-06 확인).")
+    save_fig(fig, "fig_A1_recall_timing.png", note=note)
+    plt.close(fig)
+
+
 def main():
     t0 = time.time()
     df = add_intervals(pd.read_parquet(CALLS))
@@ -258,6 +295,7 @@ def main():
     f = flow_counts(imm)
     print("\n", f.to_string())
     fig_status_flow(f)
+    fig_recall_timing(imm)
     print(f"[02_descriptive] 완료 {time.time() - t0:.0f}초")
 
 

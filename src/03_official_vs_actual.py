@@ -97,7 +97,8 @@ def build_tables(df):
     return t, h, overall
 
 
-def fig_official_vs_actual(t, h, overall):
+def fig_official_vs_actual_v1(t, h, overall):
+    """초기 2패널 버전(보관용)."""
     import matplotlib.pyplot as plt
     from matplotlib.ticker import FuncFormatter
     apply_style()
@@ -157,6 +158,78 @@ def fig_official_vs_actual(t, h, overall):
             f"    예정 시간대별)을 재현하면 일자×시간대 {int(t['reproduced'].notna().sum()):,}칸 중 {match:.1f}%가 분 단위까지 일치. "
             "(가)는 일자 칸의 단순 평균.\n"
             "    (나)는 즉시호출. 최종 포기 = 취소 후 30분 안에 같은 출발동·목적동·장애유형 재접수가 없는 취소.")
+    save_fig(fig, "fig_02_official_vs_actual_v1.png", note=note)
+    plt.close(fig)
+
+
+def fig_official_vs_actual(t, h, overall):
+    """보고서용: 60분 안에 탄 비율 격차(큰 패널) + 공식 평균 대기시간(위쪽 얇은 띠 패널, x축 공유).
+    두 지표는 단위가 달라 한 축에 겹치지 않고(이중 축 금지), 같은 시간축의 두 패널로 나눈다."""
+    import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter
+    apply_style()
+    c = load_counts()
+    hrs = h.index.values
+    a_col, b_col = "P60_승차자만%", "P60_전체_최종포기기준%"
+    gap = h[a_col] - h[b_col]
+    night = [20, 21, 22, 23, 0, 1]
+    day = [11, 12, 13]
+    g_night = (gap.loc[night].min(), gap.loc[night].max())
+    g_day = gap.loc[day].mean()
+
+    fig, (a0, a1) = plt.subplots(2, 1, figsize=(FIG_WIDTH_IN, 4.1), sharex=True,
+                                 gridspec_kw={"height_ratios": [1, 3.3], "hspace": 0.12})
+    fig.subplots_adjust(left=0.085, right=0.83, top=0.83, bottom=0.235)
+    shade = "#f0efec"
+    for ax in (a0, a1):
+        ax.axvspan(19.5, 23.5, color=shade, lw=0, zorder=0)
+        ax.axvspan(-0.5, 1.5, color=shade, lw=0, zorder=0)
+        ax.set_xlim(-0.5, 23.5)
+        ax.tick_params(length=0)
+
+    # 위: 공식 평균 대기시간(분)
+    a0.bar(hrs, h["공식값"], width=0.62, color=COLOR["axis"], zorder=2)
+    a0.set_ylim(0, 70)
+    a0.set_yticks([0, 30, 60])
+    a0.grid(axis="y"); a0.set_axisbelow(True)
+    a0.text(-0.3, 66, "공식 평균 대기시간(분, 승차한 사람만)", fontsize=7.3, color=COLOR["ink2"], va="top")
+    for hh in (int(h["공식값"].idxmin()), int(h["공식값"].idxmax())):
+        a0.text(hh, h.loc[hh, "공식값"] + 2, f"{h.loc[hh, '공식값']:.0f}", ha="center", va="bottom", fontsize=6.8,
+                color=COLOR["ink2"])
+
+    # 아래: 60분 안에 탄 비율과 그 격차
+    a1.fill_between(hrs, h[b_col], h[a_col], color=COLOR["cancel"], alpha=0.14, lw=0, zorder=1)
+    a1.plot(hrs, h[a_col], color=COLOR["ink2"], lw=2, solid_capstyle="round", zorder=3)
+    a1.plot(hrs, h[b_col], color=COLOR["cancel"], lw=2, solid_capstyle="round", zorder=3)
+    for col, lab, color in [(a_col, "승차자만", COLOR["ink2"]), (b_col, "즉시호출 전체", COLOR["cancel"])]:
+        y = h[col].iloc[-1]
+        a1.plot([hrs[-1]], [y], "o", ms=4.5, color=color, mec=COLOR["surface"], mew=1, zorder=4)
+        a1.text(23.9, y, f"{lab}  {y:.0f}%", fontsize=7, color=COLOR["ink"], va="center", ha="left",
+                linespacing=1.25, clip_on=False)
+    a1.set_ylim(0, 105)
+    a1.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0f}%"))
+    a1.set_ylabel(f"접수 후 {H}분 안에 승차한 비율")
+    a1.grid(axis="y"); a1.set_axisbelow(True)
+    a1.set_xticks(range(0, 24, 3))
+    a1.set_xlabel("접수 시간대(시)")
+    a1.text(21.5, 5, f"공식 통계가\n가리는 구간\n격차 {g_night[0]:.0f}~{g_night[1]:.0f}%p", ha="center", va="bottom",
+            fontsize=7, color=COLOR["ink"], linespacing=1.3)
+    a1.text(11.4, 79, f"11~13시 격차 {g_day:.0f}%p", ha="center", va="top", fontsize=7, color=COLOR["ink2"])
+    j = 21
+    a1.annotate(f"{j}시: {h.loc[j, a_col]:.0f}% → {h.loc[j, b_col]:.0f}%", xy=(j, h.loc[j, b_col]),
+                xytext=(14.2, 30), fontsize=7, color=COLOR["ink"],
+                arrowprops=dict(arrowstyle="-", color=COLOR["muted"], lw=0.6))
+
+    fig.text(0.01, 0.975, "공식 평균이 가장 많이 가리는 사람은 밤에 부르는 이용자다",
+             fontsize=10, fontweight="bold", color=COLOR["ink"], va="top")
+    fig.text(0.01, 0.91, f"{H}분 안에 탄 비율: 승차자만 보면 {overall['승차자만']:.1f}%, 취소한 사람까지 넣으면 "
+                         f"{overall['최종포기기준']:.1f}%. 음영 = 공식 지표에 보이지 않는 격차",
+             fontsize=7.8, color=COLOR["ink2"], va="top")
+    match = t["재현일치"].mean() * 100
+    note = (f"주: 공식값 = 서울시설공단 '시간대별 대기시간평균'. 탑승내역으로 공식 산식(승차한 콜의 승차-예정 평균)을 재현하면 일자×시간대 "
+            f"{int(t['reproduced'].notna().sum()):,}칸 중\n    {match:.1f}%가 분 단위까지 일치. 아래 패널은 즉시호출. "
+            f"최종 포기 기준 = 재접수 취소(취소 후 30분 안에 같은 출발동·목적동·장애유형 재접수)\n"
+            f"    {c['imm_recall']:,}건을 분모에서 뺀 값. 모든 취소를 포함하면 {overall['모든취소']:.1f}%. 위 막대는 일자 칸의 단순 평균.")
     save_fig(fig, "fig_02_official_vs_actual.png", note=note)
     plt.close(fig)
 
@@ -165,6 +238,7 @@ def main():
     t0 = time.time()
     df = pd.read_parquet(CALLS)
     t, h, overall = build_tables(df)
+    fig_official_vs_actual_v1(t, h, overall)
     fig_official_vs_actual(t, h, overall)
     print(f"[03_official_vs_actual] 완료 {time.time() - t0:.0f}초")
 
