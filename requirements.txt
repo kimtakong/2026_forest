@@ -1,0 +1,13 @@
+# Python 3.13.9 에서 확인
+pandas==2.3.3
+numpy==2.4.4
+pyarrow==25.0.1
+lifelines==0.30.3
+lightgbm==4.6.0
+shap==0.50.0
+scikit-learn==1.7.2
+matplotlib==3.10.7
+geopandas==1.2.0
+shapely==2.1.2
+pyproj==3.8.0
+pyogrio==0.13.0

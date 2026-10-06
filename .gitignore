@@ -1,0 +1,16 @@
+# 원본·가공 데이터 (GitHub 100MB 제한, 재배포 방지)
+datas/
+data_processed/
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# OS / 편집기
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+~$*
