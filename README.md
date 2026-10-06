@@ -24,6 +24,7 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 | 02 | `src/02_descriptive.py` 기술통계, 흐름도(fig_01), 부록 fig_A1 | 약 10초 |
 | 03 | `src/03_official_vs_actual.py` 공식값 vs 실제(fig_02) | 약 5초 |
 | 04 | `src/04_cif_vs_naive.py` naive KM vs 경쟁위험 CIF(fig_03) | 약 3초 |
+| 05 | `src/05_conditional_residual.py` 조건부 잔여대기(fig_04) | 약 3초 |
 | 합계 | | 약 1분 20초 (첫 실행, CSV 파싱 포함) |
 
 \* Windows 11 PC 기준 측정값. 이후 단계가 추가되면 갱신한다.

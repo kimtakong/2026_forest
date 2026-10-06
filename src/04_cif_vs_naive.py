@@ -4,13 +4,8 @@
   naive KM : 승차만 사건, 취소·기타 실패는 중도절단(손종훈 2022 방식). 승차 누적확률 = 1 - S(t).
   경쟁위험  : 승차 / 최종 포기 / 재접수 취소 / 기타 실패를 서로 경쟁하는 사건으로 둔 Aalen-Johansen CIF.
               (사건 코드 E_all_ab: 1 승차, 2 최종 포기, 3 기타 실패, 4 재접수 취소, 0 중도절단)
-이산시간 추정
-  n(k)   = 구간 k 시작 시점에 남아 있는 콜 수 (floor(T) >= k)
-  h_j(k) = d_j(k) / n(k)                      원인 j의 구간 해저드
-  S(k+1) = S(k) * (1 - sum_j h_j(k))          전체 생존
-  F_j(k+1) = F_j(k) + S(k) * h_j(k)           원인 j의 누적발생함수
-  naive: S_b(k+1) = S_b(k) * (1 - h_승차(k)), 승차 누적확률 = 1 - S_b
-같은 구간에서 중도절단은 사건 뒤에 일어난 것으로 둔다(표준 관례).
+이산시간 추정식은 survival.py.
+분모 = 콜 기준(본문). 에피소드 기준(재접수 취소 콜 제외)은 민감도.
 민감도: (a) 전체 취소를 한 사건으로(E_all)  (b) 기타 실패 콜을 빼고 계산
 출력: outputs/tables/naive_vs_cif_at_t.csv (30·60·90분), cif_curves.csv (0~180분 곡선)
       outputs/figures/fig_03_naive_vs_cif.png (전체 / 야간 20~01시)
@@ -20,38 +15,15 @@ import time
 import numpy as np
 import pandas as pd
 
-from utils import CALLS, COLOR, FIG_WIDTH_IN, apply_style, load_counts, save_fig, save_table
+from survival import discrete_cif
+from utils import CALLS, COLOR, FIG_WIDTH_IN, NIGHT_HOURS, apply_style, load_counts, save_fig, save_table
 
-T_MAX = 180
 T_REPORT = (30, 60, 90)
-NIGHT = [20, 21, 22, 23, 0, 1]
 CAUSES = {1: "승차", 2: "최종 포기", 4: "재접수 취소", 3: "기타 실패"}
 
 
-def discrete_cif(T, E, causes, t_max=T_MAX):
-    """1분 이산 Aalen-Johansen. 반환: k=0..t_max 시점(구간 시작)의 S, 원인별 F, naive 승차 누적확률, 위험집합 크기."""
-    k = np.minimum(np.floor(T).astype(int), t_max + 1)       # t_max 이후는 한 칸에 모은다
-    n_bins = t_max + 2
-    at_risk = np.bincount(k, minlength=n_bins)[::-1].cumsum()[::-1]   # floor(T) >= j 인 수
-    d = {c: np.bincount(k[E == c], minlength=n_bins) for c in causes}
-    S = np.ones(t_max + 1)
-    F = {c: np.zeros(t_max + 1) for c in causes}
-    Sb = np.ones(t_max + 1)
-    for j in range(t_max):
-        n = at_risk[j]
-        h = {c: d[c][j] / n if n else 0.0 for c in causes}
-        for c in causes:
-            F[c][j + 1] = F[c][j] + S[j] * h[c]
-        S[j + 1] = S[j] * (1 - sum(h.values()))
-        Sb[j + 1] = Sb[j] * (1 - h[1])
-    out = pd.DataFrame({"t": np.arange(t_max + 1), "위험집합": at_risk[: t_max + 1], "S": S, "naive_승차": 1 - Sb})
-    for c in causes:
-        out[f"F_{c}"] = F[c]
-    return out
-
-
 def run_group(d, label):
-    """기본(E_all_ab)과 민감도 두 가지를 계산한다."""
+    """기본(콜 기준, E_all_ab)과 민감도 세 가지를 계산한다."""
     res = {}
     res["기본"] = discrete_cif(d.T_all.values, d.E_all_ab.values, [1, 2, 4, 3])
     res["민감도: 취소를 한 사건으로"] = discrete_cif(d.T_all.values, d.E_all.values, [1, 2, 3])
@@ -65,12 +37,14 @@ def run_group(d, label):
     return res
 
 
-def at_t_table(results):
+def at_t_table(results, n_groups):
+    n_all = n_groups["전체 시간대"]
     rows = []
     for (grp, basis), c in results.items():
         for t in T_REPORT:
             r = c.loc[c.t == t].iloc[0]
-            row = {"집단": grp, "기준": basis, "t(분)": t, "위험집합": int(r["위험집합"]),
+            row = {"집단": grp, "집단 콜 수": n_groups[grp], "즉시호출 대비%": n_groups[grp] / n_all * 100,
+                   "기준": basis, "t(분)": t, "위험집합": int(r["위험집합"]),
                    "naive 승차 누적확률%": r["naive_승차"] * 100, "AJ 승차 CIF%": r["F_1"] * 100}
             row["과대평가(naive-AJ)%p"] = row["naive 승차 누적확률%"] - row["AJ 승차 CIF%"]
             if basis == "민감도: 취소를 한 사건으로":
@@ -142,15 +116,16 @@ def main():
     df = pd.read_parquet(CALLS, columns=["call_type", "T_all", "E_all", "E_all_ab", "t_request"])
     imm = df[df.call_type == "immediate"]
     assert len(imm) == load_counts()["imm_n"]
-    groups = {"전체 시간대": imm, "야간(20~01시)": imm[imm.t_request.dt.hour.isin(NIGHT)]}
+    groups = {"전체 시간대": imm, "야간(20~01시)": imm[imm.t_request.dt.hour.isin(NIGHT_HOURS)]}
     results = {}
     for g, d in groups.items():
         for basis, c in run_group(d, g).items():
             results[(g, basis)] = c
     curves = pd.concat(results.values(), ignore_index=True)
     save_table(curves.round(6), "cif_curves.csv")
-    tab = at_t_table(results)
-    fig_naive_vs_cif(results, tab, {g: len(d) for g, d in groups.items()})
+    n_groups = {g: len(d) for g, d in groups.items()}
+    tab = at_t_table(results, n_groups)
+    fig_naive_vs_cif(results, tab, n_groups)
     print(f"[04_cif_vs_naive] 완료 {time.time() - t0:.0f}초")
 
 

@@ -20,7 +20,8 @@ import numpy as np
 import pandas as pd
 
 import recall
-from utils import (CALLS, CANONICAL, DONG_MAPPING, HOLIDAYS_2025, OBS_CAP_MIN, SEOUL_GU, add_call_type, add_status,
+from utils import (CALLS, CANONICAL, DAY_HOURS, DONG_MAPPING, HOLIDAYS_2025, NIGHT_HOURS, OBS_CAP_MIN, SEOUL_GU,
+                   add_call_type, add_status,
                    load_raw, minutes, save_table)
 
 
@@ -235,7 +236,14 @@ def canonical_counts(raw, df):
     add("imm_post_recall", "분석 사건", "배차 후 재접수 취소(E2_ab=4)", (imm.E2_ab == 4).sum())
     add("imm_final", "분석 사건", "최종 포기 전체(E_all_ab=2)", (imm.E_all_ab == 2).sum(), "보고서 '포기'의 기본 숫자")
     add("imm_recall", "분석 사건", "재접수 취소 전체(E_all_ab=4)", (imm.E_all_ab == 4).sum())
-    add("imm_episodes", "분석 사건", "이용 건(에피소드) = 즉시호출 - 재접수 취소", len(imm) - (imm.E_all_ab == 4).sum())
+    add("imm_episodes", "분석 사건", "이용 건(에피소드) = 즉시호출 - 재접수 취소", len(imm) - (imm.E_all_ab == 4).sum(),
+        "민감도용 분모. 본문 분모는 콜 기준(imm_n)")
+    hr = imm.t_request.dt.hour
+    n_night, n_day = int(hr.isin(NIGHT_HOURS).sum()), int(hr.isin(DAY_HOURS).sum())
+    add("imm_night_n", "분석 대상 상태", "야간(20~01시) 즉시호출", n_night,
+        f"즉시호출의 {n_night / len(imm) * 100:.2f}%. 접수 20:00~01:59")
+    add("imm_day_n", "분석 대상 상태", "주간(10~14시) 즉시호출", n_day,
+        f"즉시호출의 {n_day / len(imm) * 100:.2f}%. 접수 10:00~14:59")
     t = pd.DataFrame(rows)
     c = dict(zip(t.key, t["건수"]))
     assert c["imm_dispatch"] + c["imm_pre_cancel"] + c["imm_s1_censor"] == c["imm_n"]
