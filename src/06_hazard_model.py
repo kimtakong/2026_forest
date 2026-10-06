@@ -43,7 +43,9 @@ FEAT_LABEL = {"k": "경과 시간(5분 구간)", "hour": "접수 시각", "dow":
 TITLE_SHAP = "배차는 대기 콜 수(부하)가, 최종 포기는 부하에 더해 출발동·접수 시각·장애유형이 크게 좌우한다"
 PARAMS = dict(objective="multiclass", num_class=4, learning_rate=0.08, num_leaves=63, min_data_in_leaf=200,
               feature_fraction=0.9, bagging_fraction=0.8, bagging_freq=1, lambda_l2=1.0, seed=SEED,
-              num_threads=16, verbose=-1)
+              num_threads=16, verbose=-1,
+              # 재현성: 같은 입력·같은 파라미터·같은 스레드 수에서 모델 파일까지 같게(LightGBM 문서 권장 조합)
+              deterministic=True, force_row_wise=True)
 
 
 def stratified_sample(d, frac):

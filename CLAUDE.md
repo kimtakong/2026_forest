@@ -260,7 +260,7 @@ Output: for each rule -> flags per hour, recall of eventual cancellations,
     docs/ai_log.md
   ```
 - **원본 CSV는 커밋하지 않는다.** GitHub 100MB 제한 때문이다. README에 공공데이터포털 다운로드 방법, 파일명, 데이터 기준일을 적는다.
-- **환경:** `requirements.txt`에 버전을 고정한다(pandas, numpy, pyarrow, lifelines, lightgbm, shap, scikit-learn, matplotlib, geopandas는 지도용 선택). 난수 시드는 42로 고정한다.
+- **환경:** `requirements.txt`에 버전을 고정한다(pandas, numpy, pyarrow, lifelines, lightgbm, shap, scikit-learn, matplotlib, geopandas는 지도용 선택). 난수 시드는 42로 고정한다. LightGBM은 `deterministic=True, force_row_wise=True, num_threads=16`으로 학습한다. 같은 입력이면 모델 파일까지 같게 나온다(2026-10-06 확인: 두 번 학습한 모델 파일 일치).
 - **경로:** 모든 경로는 `src/utils.py`의 상수로 관리한다. 하드코딩한 절대경로는 금지(결선에서 다른 PC로 실행할 수 있음).
 - **한글 폰트:** matplotlib에서 Windows는 'Malgun Gothic'을 쓰고, 없으면 NanumGothic으로 대체한다. 음수 부호가 깨지지 않게 처리한다.
 - **그림 규격(2026-10-06 변경):** 300dpi PNG. 그림은 두 판으로 만든다(`utils.draw_figures`).

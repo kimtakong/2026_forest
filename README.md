@@ -32,6 +32,12 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 
 \* Windows 11 PC 기준 측정값. 이후 단계가 추가되면 갱신한다.
 
+**재현성:**
+- 난수 시드는 42다.
+- LightGBM은 `deterministic=True`, `force_row_wise=True`, `num_threads=16`으로 학습한다.
+- 같은 입력으로 06단계를 두 번 실행하면 모델 파일(`models/lgbm_stage1.txt`)까지 바이트 단위로 같다.
+- 전체 재실행 시 표·그림도 같게 재현된다. 다르게 나오는 것은 학습 시간 기록뿐이다.
+
 **06단계 표본과 `--sample`:**
 - 본 실행은 **표본추출 없이 전체**로 학습한다(RAM 63GB PC에서 확인).
   - 학습(1~8월): 콜 1,003,367건, person-period 4,304,023행
