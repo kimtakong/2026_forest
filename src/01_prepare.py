@@ -4,11 +4,14 @@
 출력 : data_processed/calls.parquet          콜 1건 = 1행, Stage 1·2·Overall 시간(분)과 사건
        outputs/tables/exclusion_log.csv     단계별 제외 건수
        outputs/tables/prepare_summary.csv   호출유형 x 상태, 단계별 사건 건수
+       outputs/tables/cancel_recall_check.csv  재접수 판별(10/30/60분)과 취소 시각 분포
+       outputs/tables/canonical_counts.csv  기준 건수표. 모든 그림·표의 숫자는 여기서 인용한다
 
 사건 코드
   Stage 1 (시작 -> 배차)      E1: 0 중도절단, 1 배차, 2 배차 전 취소
   Stage 2 (배차 -> 승차)      E2: 0 중도절단, 1 승차, 2 배차 후 취소, 3 기타 실패(배차 후 미승차·미취소)
   Overall (시작 -> 승차)  E_all: 0 중도절단, 1 승차, 2 취소(배차 전+후), 3 기타 실패
+  '최종 포기' 기준(E1_ab, E2_ab, E_all_ab): 취소 중 30분 안에 같은 조건 재접수가 있는 건을 사건 4로 분리(recall.py)
 시작 시점: immediate = 접수일시, scheduled = 예정일시. 관측 상한: 시작 후 360분.
 """
 import time
@@ -16,8 +19,9 @@ import time
 import numpy as np
 import pandas as pd
 
-from utils import (CALLS, DONG_MAPPING, HOLIDAYS_2025, OBS_CAP_MIN, SEOUL_GU, add_call_type, add_status, load_raw,
-                   minutes, save_table)
+import recall
+from utils import (CALLS, CANONICAL, DONG_MAPPING, HOLIDAYS_2025, OBS_CAP_MIN, SEOUL_GU, add_call_type, add_status,
+                   load_raw, minutes, save_table)
 
 
 def apply_exclusions(df):
@@ -131,18 +135,134 @@ def summarize(df):
     print("\n  immediate Stage1 시간(분) 분위수 by 사건\n", q.to_string())
 
 
+def recall_check(df):
+    """즉시호출 취소를 '재접수 취소'와 '최종 포기'로 나눈 결과와 취소 시각 분포."""
+    imm = df[df.call_type == "immediate"]
+    n_calls = len(imm)
+    pre = imm[imm.E1 == 2]
+    post = imm[imm.E2 == 2]
+    groups = {"배차 전 취소": pre, "배차 후 취소": post, "전체 취소": pd.concat([pre, post])}
+    status_of = df.set_index("row_id")["status"]
+    rows = []
+    add = lambda sec, typ, w, k, v: rows.append({"구분": sec, "취소유형": typ, "기준(분)": w, "지표": k, "값": v})
+
+    for typ, g in groups.items():
+        for w in recall.RECALL_WINDOWS:
+            r = g[f"recall_{w}"]
+            nxt = status_of.reindex(g.loc[r, "recall_next_row"].astype("int64")).values
+            add("A 재접수 판별", typ, w, "취소 건수", len(g))
+            add("A 재접수 판별", typ, w, "재접수 취소 건수", int(r.sum()))
+            add("A 재접수 판별", typ, w, "재접수 취소 비율%", round(r.mean() * 100, 2))
+            add("A 재접수 판별", typ, w, "최종 포기 건수", int((~r).sum()))
+            add("A 재접수 판별", typ, w, "최종 포기 비율%(취소 대비)", round((~r).mean() * 100, 2))
+            add("A 재접수 판별", typ, w, "최종 포기 비율%(즉시호출 전체 대비)", round((~r).sum() / n_calls * 100, 2))
+            add("A 재접수 판별", typ, w, "재접수 콜이 결국 승차한 비율%", round((nxt == "boarded").mean() * 100, 2))
+
+    base = recall.baseline_false_match(imm)
+    for w, v in base.items():
+        add("B 위양성 기준선", "승차 콜(같은 규칙을 승차 시각에 적용)", w, "우연 일치 비율%", round(v, 2))
+
+    for typ, g in groups.items():
+        r = g[f"recall_{recall.RECALL_DEFAULT}"]
+        r2c = minutes(g.t_request, g.t_cancel)
+        d2c = minutes(g.t_dispatch, g.t_cancel)
+        for sub, m in [("전체", slice(None)), ("재접수 취소", r), ("최종 포기", ~r)]:
+            x = r2c[m]
+            add("C 취소 시각 분포", f"{typ} | {sub}", recall.RECALL_DEFAULT, "접수→취소 중앙값(분)", round(x.median(), 2))
+            for c in (2, 5, 10):
+                add("C 취소 시각 분포", f"{typ} | {sub}", recall.RECALL_DEFAULT, f"접수 후 {c}분 이내 취소 비중%", round((x <= c).mean() * 100, 2))
+            if typ == "배차 후 취소":
+                y = d2c[m]
+                add("C 취소 시각 분포", f"{typ} | {sub}", recall.RECALL_DEFAULT, "배차→취소 중앙값(분)", round(y.median(), 2))
+                add("C 취소 시각 분포", f"{typ} | {sub}", recall.RECALL_DEFAULT, "배차 후 2분 이내 취소 비중%", round((y <= 2).mean() * 100, 2))
+                add("C 취소 시각 분포", f"{typ} | {sub}", recall.RECALL_DEFAULT,
+                    "배차 후 9~12분 취소 비중%(전화 미연결 자동취소 규정 구간)", round(y.between(9, 12).mean() * 100, 2))
+
+    for typ, g in groups.items():
+        add("D 참고", typ, None, "취소 전에 같은 조건 새 접수(중복 접수) 비율%", round(g["dup_before_cancel"].mean() * 100, 2))
+    gap = post.loc[post["recall_60"], "recall_gap_min"]
+    add("D 참고", "배차 후 취소", 60, "재접수 중 취소 후 10~11분에 들어온 비중%(배차 후 취소 시 10분 접수 제한 규정)",
+        round(gap.between(10, 11).mean() * 100, 2))
+
+    n_recall = int(groups["전체 취소"][f"recall_{recall.RECALL_DEFAULT}"].sum())
+    n_final = len(groups["전체 취소"]) - n_recall
+    add("E 이용 건(에피소드) 기준", "전체 취소", recall.RECALL_DEFAULT, "에피소드 수(콜 - 재접수 취소)", n_calls - n_recall)
+    add("E 이용 건(에피소드) 기준", "전체 취소", recall.RECALL_DEFAULT, "최종 포기 비율%(에피소드 대비)",
+        round(n_final / (n_calls - n_recall) * 100, 2))
+    t = pd.DataFrame(rows)
+    save_table(t, "cancel_recall_check.csv")
+    print(t[(t["기준(분)"] == 30) & t["구분"].str.startswith("A")].to_string(index=False))
+    print(t[t["구분"].str[0].isin(["B", "D", "E"])].to_string(index=False))
+
+
+def canonical_counts(raw, df):
+    """기준 건수표. 세 층을 구분한다: 원본(제외 전 상태) / 분석 대상 상태 / 분석 사건(360분 상한 적용)."""
+    rows = []
+    add = lambda key, layer, label, n, note="": rows.append(
+        {"key": key, "층": layer, "항목": label, "건수": int(n), "설명": note})
+    canc = lambda d: d.status.isin(["pre_cancel", "post_cancel"])
+    ri = raw[raw.call_type == "immediate"]
+    add("raw_n", "원본", "탑승내역 전체", len(raw))
+    add("raw_cancel", "원본", "취소 전체(즉시+사전)", canc(raw).sum(), "승차 후 취소 기록 34건은 승차로 셈. 공식 통계에서 빠진 규모")
+    add("raw_imm_cancel", "원본", "즉시호출 취소", canc(ri).sum())
+    add("raw_imm_pre_cancel", "원본", "즉시호출 배차 전 취소", (ri.status == "pre_cancel").sum())
+    add("raw_imm_post_cancel", "원본", "즉시호출 배차 후 취소", (ri.status == "post_cancel").sum())
+    add("raw_sched_cancel", "원본", "사전접수 취소", canc(raw[raw.call_type == "scheduled"]).sum(), "일정 변경일 수 있어 '포기'로 부르지 않음")
+
+    imm = df[df.call_type == "immediate"]
+    add("n_all", "분석 대상 상태", "제외 후 전체 콜", len(df))
+    add("n_sched", "분석 대상 상태", "사전접수 콜", (df.call_type == "scheduled").sum())
+    add("imm_n", "분석 대상 상태", "즉시호출 콜", len(imm), "주 분석 모집단")
+    for st, lab in [("boarded", "승차"), ("pre_cancel", "배차 전 취소"), ("post_cancel", "배차 후 취소"),
+                    ("disp_noboard", "배차 후 미승차·미취소"), ("unknown", "상태 불명")]:
+        add(f"imm_status_{st}", "분석 대상 상태", f"즉시호출 {lab}(상태 기준)", (imm.status == st).sum())
+
+    w = recall.RECALL_DEFAULT
+    add("imm_dispatch", "분석 사건", "배차(E1=1)", (imm.E1 == 1).sum())
+    add("imm_pre_cancel", "분석 사건", "배차 전 취소(E1=2)", (imm.E1 == 2).sum())
+    add("imm_s1_censor", "분석 사건", "Stage 1 중도절단(상태 불명)", (imm.E1 == 0).sum())
+    add("imm_board", "분석 사건", "승차(E2=1)", (imm.E2 == 1).sum())
+    add("imm_post_cancel", "분석 사건", "배차 후 취소(E2=2)", (imm.E2 == 2).sum(),
+        "상태 기준보다 1건 적음: 접수 후 360분 넘어 취소돼 중도절단")
+    add("imm_other_fail", "분석 사건", "기타 실패(E2=3, 배차 후 미승차·미취소)", (imm.E2 == 3).sum(),
+        "상태 기준 622건 중 23건은 하차일시가 접수 후 360분을 넘어 중도절단")
+    add("imm_s2_censor", "분석 사건", "Stage 2 중도절단(360분 초과)", (imm.E2 == 0).sum())
+    add("imm_cancel", "분석 사건", "취소 전체(E_all=2)", (imm.E_all == 2).sum())
+    add("imm_censor", "분석 사건", "Overall 중도절단(E_all=0)", (imm.E_all == 0).sum(), "상태 불명 24 + 360분 초과 24")
+    add("imm_pre_final", "분석 사건", f"배차 전 최종 포기(E1_ab=2, 재접수 {w}분 기준)", (imm.E1_ab == 2).sum())
+    add("imm_pre_recall", "분석 사건", "배차 전 재접수 취소(E1_ab=4)", (imm.E1_ab == 4).sum())
+    add("imm_post_final", "분석 사건", "배차 후 최종 포기(E2_ab=2)", (imm.E2_ab == 2).sum())
+    add("imm_post_recall", "분석 사건", "배차 후 재접수 취소(E2_ab=4)", (imm.E2_ab == 4).sum())
+    add("imm_final", "분석 사건", "최종 포기 전체(E_all_ab=2)", (imm.E_all_ab == 2).sum(), "보고서 '포기'의 기본 숫자")
+    add("imm_recall", "분석 사건", "재접수 취소 전체(E_all_ab=4)", (imm.E_all_ab == 4).sum())
+    add("imm_episodes", "분석 사건", "이용 건(에피소드) = 즉시호출 - 재접수 취소", len(imm) - (imm.E_all_ab == 4).sum())
+    t = pd.DataFrame(rows)
+    c = dict(zip(t.key, t["건수"]))
+    assert c["imm_dispatch"] + c["imm_pre_cancel"] + c["imm_s1_censor"] == c["imm_n"]
+    assert c["imm_board"] + c["imm_post_cancel"] + c["imm_other_fail"] + c["imm_s2_censor"] == c["imm_dispatch"]
+    assert c["imm_pre_cancel"] + c["imm_post_cancel"] == c["imm_cancel"] == c["imm_final"] + c["imm_recall"]
+    t.to_csv(CANONICAL, index=False, encoding="utf-8-sig")
+    print(f"  -> {CANONICAL.name}")
+    print(t[["key", "항목", "건수"]].to_string(index=False))
+
+
 def main():
     t0 = time.time()
-    df = add_call_type(add_status(load_raw()))
-    assert df["flag_board_no_dispatch"].sum() == 0, "배차 없이 승차한 행이 있다"
-    df = apply_exclusions(df)
+    raw = add_call_type(add_status(load_raw()))
+    assert raw["flag_board_no_dispatch"].sum() == 0, "배차 없이 승차한 행이 있다"
+    df = apply_exclusions(raw)
     df = add_times_events(df)
     df = add_covariates(df)
+    df = recall.add_abandon_events(recall.add_recall(df))
     summarize(df)
+    recall_check(df)
+    canonical_counts(raw, df)
     cols = ["row_id", "call_type", "status", "t_request", "t_sched", "t_start", "t_dispatch", "t_board", "t_alight",
-            "t_cancel", "T1", "E1", "T2", "E2", "T_all", "E_all", "gap_min", "date", "hour", "dow", "month", "is_holiday",
-            "is_offday", "o_gu", "o_dong", "unit_id", "unit_name", "d_gu", "d_dong", "purpose", "resv_purpose",
-            "disability", "disability_grp", "vehicle", "fare", "distance_m", "flag_board_and_cancel", "flag_auto_125"]
+            "t_cancel", "T1", "E1", "T2", "E2", "T_all", "E_all", "E1_ab", "E2_ab", "E_all_ab", "recall_gap_min",
+            "recall_next_row", "recall_10", "recall_30", "recall_60", "dup_before_cancel", "gap_min", "date", "hour",
+            "dow", "month", "is_holiday", "is_offday", "o_gu", "o_dong", "unit_id", "unit_name", "d_gu", "d_dong",
+            "purpose", "resv_purpose", "disability", "disability_grp", "vehicle", "fare", "distance_m",
+            "flag_board_and_cancel", "flag_auto_125"]
     df[cols].to_parquet(CALLS, index=False)
     print(f"\n  -> {CALLS.name}: {len(df):,}행 (immediate {int((df.call_type == 'immediate').sum()):,})")
     print(f"[01_prepare] 완료 {time.time() - t0:.0f}초")

@@ -28,6 +28,7 @@ RAW_CACHE = DATA_PROC / "raw_trips.parquet"   # 원본을 타입만 바꿔 저�
 CALLS = DATA_PROC / "calls.parquet"
 DONG_MAPPING = DATA_PROC / "dong_mapping.csv"
 MAP_UNITS = DATA_PROC / "map_units.parquet"
+CANONICAL = OUT_TAB / "canonical_counts.csv"   # 모든 그림·표가 인용하는 기준 건수(01단계에서 한 번만 계산)
 
 # ---------------------------------------------------------------- 상수
 SEED = 42
@@ -79,6 +80,12 @@ def load_raw(refresh: bool = False) -> pd.DataFrame:
     df.to_parquet(RAW_CACHE, index=False)
     print(f"[load_raw] CSV {len(df):,}행 파싱 {time.time() - t0:.0f}초 -> {RAW_CACHE.name}")
     return df
+
+
+def load_counts() -> dict:
+    """기준 건수표(key -> 건수). 그림 제목·주석의 숫자는 여기서만 가져온다."""
+    t = pd.read_csv(CANONICAL, encoding="utf-8-sig")
+    return dict(zip(t["key"], t["건수"]))
 
 
 def load_official_wait() -> pd.Series:
