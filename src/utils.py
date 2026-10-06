@@ -164,33 +164,111 @@ COLOR = {
     "surface": "#fcfcfb", "ink": "#0b0b0b", "ink2": "#52514e", "muted": "#898781",
     "grid": "#e1e0d9", "axis": "#c3c2b7",
 }
-FIG_WIDTH_IN = 16 / 2.54   # 보고서 본문 폭 16cm
+FIG_WIDTH_IN = 16 / 2.54          # 주석판(annotated) 폭
+CLEAN_WIDTH_IN = 14 / 2.54        # 보고서판(clean) 폭: 본문 14cm에 그대로 넣는다
+
+# 그림은 두 모드로 만든다.
+#   clean     : 보고서용. 제목·부제·주석·출처·숫자 강조 문구 없음. 축·축 이름·범례·짧은 패널 이름·기준선만.
+#               outputs/figures/<이름>.png, 폭 14cm, 축·범례 글자 8.5~9pt 이상
+#   annotated : 발표용. 제목·부제·주석·출처 포함. outputs/figures/annotated/<이름>.png
+#   지운 제목·부제·주석은 annotated 저장 때 outputs/figures/captions.md 에 모은다.
+_FIG = {"mode": "annotated"}
+_FS = {"clean": {"tick": 8.5, "label": 9, "legend": 8.5, "panel": 9.5, "small": 8.5},
+       "annotated": {"tick": 8, "label": 8, "legend": 7.5, "panel": 8.5, "small": 7}}
+CAPTIONS_JSON = ROOT / "outputs" / "figures" / "annotated" / "captions.json"
+CAPTIONS_MD = ROOT / "outputs" / "figures" / "captions.md"
+
+
+def clean() -> bool:
+    return _FIG["mode"] == "clean"
+
+
+def fig_width() -> float:
+    return CLEAN_WIDTH_IN if clean() else FIG_WIDTH_IN
+
+
+def FS(kind: str) -> float:
+    """현재 모드의 글자 크기(pt). kind: tick / label / legend / panel / small"""
+    return _FS[_FIG["mode"]][kind]
+
+
+def draw_figures(fn, *args, **kwargs):
+    """같은 그림 함수를 clean, annotated 두 모드로 한 번씩 그린다."""
+    try:
+        for m in ("clean", "annotated"):
+            _FIG["mode"] = m
+            fn(*args, **kwargs)
+    finally:
+        _FIG["mode"] = "annotated"
 
 
 def apply_style() -> str:
-    """한글 폰트 + 차분한 축·격자. 모든 그림 스크립트가 처음에 부른다."""
+    """한글 폰트 + 차분한 축·격자. 글자 크기는 현재 모드를 따른다."""
     import matplotlib
     font = setup_korean_font()
+    f = _FS[_FIG["mode"]]
     matplotlib.rcParams.update({
         "figure.facecolor": COLOR["surface"], "axes.facecolor": COLOR["surface"], "savefig.facecolor": COLOR["surface"],
         "axes.edgecolor": COLOR["axis"], "axes.linewidth": 0.8, "axes.labelcolor": COLOR["ink2"],
         "axes.titlecolor": COLOR["ink"], "axes.spines.top": False, "axes.spines.right": False,
         "axes.grid": False, "grid.color": COLOR["grid"], "grid.linewidth": 0.6, "grid.linestyle": "-",
         "xtick.color": COLOR["muted"], "ytick.color": COLOR["muted"], "xtick.labelcolor": COLOR["ink2"],
-        "ytick.labelcolor": COLOR["ink2"], "font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8,
-        "legend.frameon": False, "legend.fontsize": 7.5, "lines.linewidth": 1.6,
+        "ytick.labelcolor": COLOR["ink2"], "font.size": f["label"], "axes.titlesize": f["panel"],
+        "axes.labelsize": f["label"], "xtick.labelsize": f["tick"], "ytick.labelsize": f["tick"],
+        "legend.frameon": False, "legend.fontsize": f["legend"], "lines.linewidth": 1.6,
     })
     return font
 
 
+def fig_title(fig, title: str, sub: str | None = None, y: float = 0.975, y_sub: float = 0.905, title_size: float = 10):
+    """그림 제목·부제. annotated 모드에서만 그리고, 문구는 캡션용으로 기억한다."""
+    fig._caption = {"title": title, "sub": sub}
+    if clean():
+        return
+    fig.text(0.01, y, title, fontsize=title_size, fontweight="bold", color=COLOR["ink"], va="top")
+    if sub:
+        fig.text(0.01, y_sub, sub, fontsize=7.8, color=COLOR["ink2"], va="top")
+
+
 def save_fig(fig, name: str, source: str = SOURCE_NOTE, note: str | None = None) -> Path:
-    """출처(와 주석)를 왼쪽 아래에 넣고 300dpi PNG로 저장."""
-    text = source if note is None else f"{note}\n{source}"
-    fig.text(0.01, 0.005, text, ha="left", va="bottom", fontsize=6.5, color=COLOR["muted"], linespacing=1.4)
-    p = OUT_FIG / name
-    fig.savefig(p, dpi=300)
+    """clean: 여백을 잘라 outputs/figures/ 에 저장. annotated: 주석·출처를 넣어 outputs/figures/annotated/ 에 저장하고 캡션 기록."""
+    import json
+    if clean():
+        p = OUT_FIG / name
+        fig.savefig(p, dpi=300, bbox_inches="tight", pad_inches=0.04)
+    else:
+        text = source if note is None else f"{note}\n{source}"
+        fig.text(0.01, 0.005, text, ha="left", va="bottom", fontsize=6.5, color=COLOR["muted"], linespacing=1.4)
+        p = OUT_FIG / "annotated" / name
+        p.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(p, dpi=300)
+        if not SAMPLE_MODE:
+            cap = getattr(fig, "_caption", {"title": None, "sub": None})
+            try:
+                reg = json.loads(CAPTIONS_JSON.read_text(encoding="utf-8"))
+            except (FileNotFoundError, ValueError):
+                reg = {}
+            reg[name] = {"title": cap["title"], "sub": cap["sub"], "note": note, "source": source}
+            CAPTIONS_JSON.write_text(json.dumps(reg, ensure_ascii=False, indent=1), encoding="utf-8")
+            _write_captions_md(reg)
     print(f"  -> {p.relative_to(ROOT)}")
     return p
+
+
+def _write_captions_md(reg: dict):
+    lines = ["# 그림 캡션·주석 모음", "",
+             "보고서용 그림(`outputs/figures/*.png`)에서 지운 제목·부제·주석·출처 문구다. 각 그림 스크립트가 실행될 때 자동으로 갱신된다.",
+             "주석판 그림은 `outputs/figures/annotated/`에 같은 파일명으로 있다.", ""]
+    for name in sorted(reg):
+        r = reg[name]
+        lines += [f"## {name}", "", f"- **한 줄 제목(캡션):** {r['title'] or '(없음)'}"]
+        if r.get("sub"):
+            lines.append(f"- **부제:** {r['sub']}")
+        if r.get("note"):
+            note = " ".join(x.strip() for x in r["note"].replace("주:", "", 1).splitlines())
+            lines.append(f"- **주석(정의·표본·기준):** {note}")
+        lines += [f"- **출처:** {r['source'].replace('자료: ', '')}", ""]
+    CAPTIONS_MD.write_text("\n".join(lines), encoding="utf-8")
 
 
 def setup_korean_font() -> str:

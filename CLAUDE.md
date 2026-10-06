@@ -160,7 +160,7 @@
 | 02 | `02_descriptive.py` | 상태 조합표, 시간 분포, 시간대·요일·구별 취소율, 차량구분별 비교 | `outputs/tables/desc_*.csv`, `fig_01_status_flow.png`(접수 → 배차/배차 전 취소 → 승차/배차 후 취소 흐름도) |
 | 03 | `03_official_vs_actual.py` | **공식 시간대별 평균 대기시간**과 탑승내역 재계산값 비교: (a) 승차완료 건 평균, (b) 승차완료 건 중앙값, (c) 취소 포함 "60분 내 승차 확률". 일×시간대 단위로 맞춰 비교. **그림(보고서 첫 장):** "공식값(승차자만) vs 취소 포함 실제"를 시간대별로 나란히 보이고, 공식 산식을 분 단위까지 재현(8,718칸 중 93.8%)했다는 점을 그림 주석에 넣는다(2026-10-06 사용자 요청) | `fig_02_official_vs_actual.png`, `tables/official_compare.csv` |
 | 04 | `04_cif_vs_naive.py` | **naive KM**(취소 = 중도절단, 선행연구 방식)의 1−S(t)와 **Aalen–Johansen 누적발생함수**(승차·취소)를 한 그림에 겹친다. 60분 시점의 차이를 수치로 제시 | `fig_03_naive_vs_cif.png`, `tables/naive_vs_cif_at_t.csv` |
-| 05 | `05_conditional_residual.py` | 이미 기다린 시간 s ∈ {0,15,30,45,60,90}분에서 "다음 30분 내 승차 확률", "다음 30분 내 포기 확률", 남은 대기 중앙값. 시간대 그룹별로 산출 | `fig_04_conditional_residual.png`, `tables/conditional_residual.csv` |
+| 05 | `05_conditional_residual.py` | 조건부 잔여대기. **두 집합을 구분한다**(2026-10-06 정정). ① 배차 전(아직 배차·취소 안 된 콜, `T1`): s = 0~60분의 다음 30분 배차·최종 포기·재접수 취소, 결국 배차된 콜의 남은 배차 시간 분위수. 정책 해석은 이 집합으로 한다. ② 승차·취소 전(`T_all`, 이미 배차되어 차량을 기다리는 콜 포함): 다음 30분 승차 확률이 s와 함께 오르는 것은 이미 배차된 콜 비중 때문이다. '오래 기다릴수록 곧 탄다', '대기시간 35점 덕분'이라고 해석하지 않는다 | `fig_04_conditional_residual.png`(①, 주간 vs 야간), 부록 `fig_04b_conditional_overall.png`(②), `tables/conditional_predispatch.csv`, `tables/conditional_residual.csv` |
 | 06 | `06_hazard_model.py` | 5분 구간 person-period 데이터, **LightGBM multiclass**(none / dispatch / cancel_before_dispatch). 구간별 원인별 해저드 → CIF와 조건부 잔여대기 복원. 평가와 SHAP | `models/lgbm_stage1.txt`, `fig_05_shap.png`, `tables/model_metrics.csv` |
 | 07 | `07_equity_map.py` | 지도 단위 423곳 × 시간대(주간·저녁·야간)별 **60분 내 최종 포기·승차 누적확률**(경쟁위험). 작은 칸은 같은 구 값 쪽으로 수축(w = n/(n+50)), 20건 미만은 회색 | `fig_06_equity_map.png`(야간. 좌: 선행연구 방식 naive KM 60분 내 승차 / 우: 경쟁위험 60분 내 승차, 같은 색 척도, 50건 이상·50% 미만 굵은 테두리), 부록 `fig_A3`(주간 vs 야간 포기), `tables/dong_hour_abandon.csv`, 상위·하위 10곳 표 |
 | 08 | `08_policy_simulation.py` | **현행 60분 규칙 vs 동적 규칙** 비교(9절) | `fig_07_policy.png`, `tables/policy_compare.csv` |
@@ -263,7 +263,10 @@ Output: for each rule -> flags per hour, recall of eventual cancellations,
 - **환경:** `requirements.txt`에 버전을 고정한다(pandas, numpy, pyarrow, lifelines, lightgbm, shap, scikit-learn, matplotlib, geopandas는 지도용 선택). 난수 시드는 42로 고정한다.
 - **경로:** 모든 경로는 `src/utils.py`의 상수로 관리한다. 하드코딩한 절대경로는 금지(결선에서 다른 PC로 실행할 수 있음).
 - **한글 폰트:** matplotlib에서 Windows는 'Malgun Gothic'을 쓰고, 없으면 NanumGothic으로 대체한다. 음수 부호가 깨지지 않게 처리한다.
-- **그림 규격:** 300dpi PNG, 보고서 폭(약 16cm) 기준, 제목·축 레이블은 한국어, 출처 문구 "자료: 서울시설공단 장애인콜택시 탑승내역(2025)"을 넣는다.
+- **그림 규격(2026-10-06 변경):** 300dpi PNG. 그림은 두 판으로 만든다(`utils.draw_figures`).
+  - **보고서판** `outputs/figures/*.png`: 폭 14cm. 축·축 이름(단위)·범례·짧은 패널 이름(숫자 없이)·기준선·음영만 둔다. 제목·부제·주석·출처·숫자 강조 문구·화살표는 넣지 않는다. 축·범례 글자는 8.5~9pt.
+  - **주석판** `outputs/figures/annotated/*.png`: 발표용. 제목·부제·주석·출처 포함, 폭 16cm.
+  - 보고서 캡션에 쓸 제목·주석 원문은 `outputs/figures/captions.md`에 자동으로 모인다. 출처 문구 "자료: 서울시설공단 장애인콜택시 탑승내역(2025)"는 캡션에 넣는다.
 - **실행 시간:** 전체 실행 시간을 README에 적는다. 오래 걸리는 단계는 `--sample` 옵션으로 빠르게 시연할 수 있게 한다(결선 실행 확인 대비).
 - **커밋:** 단계마다 의미 있는 메시지로 커밋한다.
 

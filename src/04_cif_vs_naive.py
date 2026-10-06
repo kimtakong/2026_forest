@@ -16,7 +16,8 @@ import numpy as np
 import pandas as pd
 
 from survival import discrete_cif
-from utils import CALLS, COLOR, FIG_WIDTH_IN, NIGHT_HOURS, apply_style, load_counts, save_fig, save_table
+from utils import (CALLS, COLOR, NIGHT_HOURS, apply_style, clean, draw_figures, fig_title, fig_width, load_counts,
+                   save_fig, save_table)
 
 T_REPORT = (30, 60, 90)
 CAUSES = {1: "승차", 2: "최종 포기", 4: "재접수 취소", 3: "기타 실패"}
@@ -68,10 +69,16 @@ def fig_naive_vs_cif(results, tab, n_groups):
     import matplotlib.pyplot as plt
     from matplotlib.ticker import FuncFormatter
     apply_style()
-    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, 3.7), sharey=True, gridspec_kw={"wspace": 0.08})
-    fig.subplots_adjust(left=0.09, right=0.985, top=0.70, bottom=0.27)
+    ann = not clean()
+    fig, axes = plt.subplots(1, 2, figsize=(fig_width(), 3.7 if ann else 3.3), sharey=True,
+                             gridspec_kw={"wspace": 0.08})
+    if ann:
+        fig.subplots_adjust(left=0.09, right=0.985, top=0.70, bottom=0.27)
+    else:
+        fig.subplots_adjust(left=0.11, right=0.985, top=0.79, bottom=0.15)
     blue, orange, orange_lt, gray = COLOR["board"], COLOR["cancel"], "#f5b494", COLOR["ink2"]
     T_SHOW = 120
+    panel = {"전체 시간대": "(가) 전체 시간대", "야간(20~01시)": "(나) 야간 20~01시"}
     for ax, grp in zip(axes, ["전체 시간대", "야간(20~01시)"]):
         c = results[(grp, "기본")]
         c = c[c.t <= T_SHOW]
@@ -80,33 +87,44 @@ def fig_naive_vs_cif(results, tab, n_groups):
         ax.plot(c.t, c.F_1 * 100, color=blue, lw=2, label="경쟁위험: 승차")
         ax.plot(c.t, c.F_2 * 100, color=orange, lw=2, label="경쟁위험: 최종 포기")
         ax.plot(c.t, c.F_4 * 100, color=orange_lt, lw=1.6, label="경쟁위험: 재접수 취소")
-        r = tab[(tab["집단"] == grp) & (tab["기준"] == "기본") & (tab["t(분)"] == 60)].iloc[0]
         ax.axvline(60, color=COLOR["axis"], lw=0.8, zorder=0)
-        ax.plot([60], [r["naive 승차 누적확률%"]], "o", ms=4.5, color=gray, mec=COLOR["surface"], mew=1)
-        ax.plot([60], [r["AJ 승차 CIF%"]], "o", ms=4.5, color=blue, mec=COLOR["surface"], mew=1)
-        ax.plot([60], [r["AJ 최종 포기 CIF%"]], "o", ms=4.5, color=orange, mec=COLOR["surface"], mew=1)
-        ax.text(63, 40,
-                f"60분: {r['naive 승차 누적확률%']:.1f}% vs {r['AJ 승차 CIF%']:.1f}%\n"
-                f"→ {r['과대평가(naive-AJ)%p']:.1f}%p 과대평가", fontsize=7, color=COLOR["ink"], va="center")
-        ax.text(62, r["AJ 최종 포기 CIF%"] + 4, f"최종 포기 {r['AJ 최종 포기 CIF%']:.1f}%",
-                fontsize=7, color=COLOR["ink"], va="bottom")
+        if ann:
+            r = tab[(tab["집단"] == grp) & (tab["기준"] == "기본") & (tab["t(분)"] == 60)].iloc[0]
+            ax.plot([60], [r["naive 승차 누적확률%"]], "o", ms=4.5, color=gray, mec=COLOR["surface"], mew=1)
+            ax.plot([60], [r["AJ 승차 CIF%"]], "o", ms=4.5, color=blue, mec=COLOR["surface"], mew=1)
+            ax.plot([60], [r["AJ 최종 포기 CIF%"]], "o", ms=4.5, color=orange, mec=COLOR["surface"], mew=1)
+            ax.text(63, 40,
+                    f"60분: {r['naive 승차 누적확률%']:.1f}% vs {r['AJ 승차 CIF%']:.1f}%\n"
+                    f"→ {r['과대평가(naive-AJ)%p']:.1f}%p 과대평가", fontsize=7, color=COLOR["ink"], va="center")
+            ax.text(62, r["AJ 최종 포기 CIF%"] + 4, f"최종 포기 {r['AJ 최종 포기 CIF%']:.1f}%",
+                    fontsize=7, color=COLOR["ink"], va="bottom")
+            ax.set_title(f"{grp}  (n = {n_groups[grp]:,})", loc="left", fontsize=8.5, pad=6)
+        else:
+            ax.set_title(panel[grp], loc="left", pad=4)
         ax.set_xlim(0, T_SHOW)
         ax.set_xticks(range(0, T_SHOW + 1, 30))
         ax.set_ylim(0, 100)
         ax.set_xlabel("접수 후 경과 시간(분)")
         ax.grid(axis="y"); ax.set_axisbelow(True); ax.tick_params(length=0)
-        ax.set_title(f"{grp}  (n = {n_groups[grp]:,})", loc="left", fontsize=8.5, pad=6)
     axes[0].yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:.0f}%"))
     axes[0].set_ylabel("누적확률")
     h, l = axes[0].get_legend_handles_labels()
-    fig.legend(h, l, loc="upper left", bbox_to_anchor=(0.085, 0.905), ncol=2, fontsize=7, handlelength=1.8,
-               columnspacing=1.5)
+    if ann:
+        fig.legend(h, l, loc="upper left", bbox_to_anchor=(0.085, 0.905), ncol=2, fontsize=7, handlelength=1.8,
+                   columnspacing=1.5)
+    else:
+        fig.legend(h, l, loc="upper left", bbox_to_anchor=(0.10, 1.0), ncol=2, handlelength=1.8, columnspacing=1.2)
     cnt = load_counts()
-    fig.text(0.01, 0.975, "취소를 '관찰 끊김'으로 처리하면 60분 안에 탈 확률을 부풀린다",
-             fontsize=10, fontweight="bold", color=COLOR["ink"], va="top")
+    t60 = {g: tab[(tab["집단"] == g) & (tab["기준"] == "기본") & (tab["t(분)"] == 60)].iloc[0] for g in panel}
+    fig_title(fig, "취소를 '관찰 끊김'으로 처리하면 60분 안에 탈 확률을 부풀린다",
+              "60분 시점 승차 누적확률(선행연구 방식 vs 경쟁위험): "
+              + ", ".join(f"{g} {r['naive 승차 누적확률%']:.1f}% vs {r['AJ 승차 CIF%']:.1f}%"
+                          f"({r['과대평가(naive-AJ)%p']:.1f}%p 과대평가, 최종 포기 {r['AJ 최종 포기 CIF%']:.1f}%)"
+                          for g, r in t60.items()))
     note = ("주: 즉시호출(접수→승차). naive KM = 취소를 중도절단한 1-S(t)(선행연구 방식). 경쟁위험 = 1분 이산 Aalen-Johansen 누적발생함수.\n"
             f"    최종 포기 {cnt['imm_final']:,}건, 재접수 취소 {cnt['imm_recall']:,}건(취소 후 30분 안에 같은 출발동·목적동·장애유형 재접수).\n"
-            f"    기타 실패 {cnt['imm_other_fail']:,}건은 그림에서 생략(표에 수록). 회색 음영 = 선행연구 방식이 부풀린 부분.")
+            f"    기타 실패 {cnt['imm_other_fail']:,}건은 그림에서 생략(표에 수록). 회색 음영 = 선행연구 방식이 부풀린 부분. 세로선 = 60분. "
+            + ", ".join(f"{g} n = {n:,}" for g, n in n_groups.items()) + ".")
     save_fig(fig, "fig_03_naive_vs_cif.png", note=note)
     plt.close(fig)
 
@@ -125,7 +143,7 @@ def main():
     save_table(curves.round(6), "cif_curves.csv")
     n_groups = {g: len(d) for g, d in groups.items()}
     tab = at_t_table(results, n_groups)
-    fig_naive_vs_cif(results, tab, n_groups)
+    draw_figures(fig_naive_vs_cif, results, tab, n_groups)
     print(f"[04_cif_vs_naive] 완료 {time.time() - t0:.0f}초")
 
 

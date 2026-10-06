@@ -24,11 +24,11 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 | 02 | `src/02_descriptive.py` 기술통계, 흐름도(fig_01), 부록 fig_A1 | 약 10초 |
 | 03 | `src/03_official_vs_actual.py` 공식값 vs 실제(fig_02) | 약 5초 |
 | 04 | `src/04_cif_vs_naive.py` naive KM vs 경쟁위험 CIF(fig_03) | 약 3초 |
-| 05 | `src/05_conditional_residual.py` 조건부 잔여대기(fig_04) | 약 3초 |
-| 06 | `src/06_hazard_model.py` LightGBM 이산시간 해저드(fig_05, 부록 fig_A2) | 약 7분 |
+| 05 | `src/05_conditional_residual.py` 조건부 잔여대기: 배차 전(fig_04)·승차 전(부록 fig_04b) | 약 3초 |
+| 06 | `src/06_hazard_model.py` LightGBM 이산시간 해저드(fig_05, 부록 fig_A2) | 약 7~15분(PC 부하에 따라 다름) |
 | 07 | `src/07_equity_map.py` 동×시간대 포기·승차 지도(fig_06, 부록 fig_A3) | 약 5초 |
 | 08 | `src/08_policy_simulation.py` 현행 60분 규칙 vs 동적 규칙(fig_07) | 약 2분 |
-| 합계 | | 약 10분 15초 (2026-10-06 전체 재실행 실측 612.8초. 첫 실행이면 CSV 파싱·경계 다운로드 약 30초 추가) |
+| 합계 | | 약 10~19분 (2026-10-06 실측 612.8초, 1,116.0초. 첫 실행이면 CSV 파싱·경계 다운로드 약 30초 추가) |
 
 \* Windows 11 PC 기준 측정값. 이후 단계가 추가되면 갱신한다.
 
@@ -40,6 +40,18 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 - 기준선 (b) RandomForest만 학습 구간 승차 콜에서 30만 건을 무작위로 뽑아 학습한다(시드 42).
 - `python run_all.py --sample` 또는 `python src/06_hazard_model.py --sample`은 학습·검증·테스트 콜을 (월 × 시 × 출발구) 층화로 10%만 써서 약 50초에 시연한다.
   - 결과는 본 결과를 덮어쓰지 않도록 `outputs/sample/`, `models/sample/`에 저장된다.
+
+## 그림
+
+- **보고서판** `outputs/figures/*.png`
+  - 폭 14cm, 300dpi
+  - 축, 축 이름, 범례, 짧은 패널 이름, 기준선만 있다.
+- **주석판** `outputs/figures/annotated/*.png`
+  - 제목, 부제, 주석(정의·표본·기준), 출처가 들어 있다. 발표용이다.
+- **캡션 원문** `outputs/figures/captions.md`
+  - 보고서판에서 뺀 제목·주석 문구를 그림별로 모은 파일이다.
+  - 각 그림 스크립트가 실행될 때 자동으로 갱신된다.
+- 두 판은 `utils.draw_figures`로 한 번에 만들어진다. `run_all.py`를 실행하면 둘 다 생긴다.
 
 ## 데이터
 

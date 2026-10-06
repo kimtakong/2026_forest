@@ -19,7 +19,8 @@ import pandas as pd
 from matplotlib.patches import PathPatch, Rectangle
 from matplotlib.path import Path as MPath
 
-from utils import CALLS, COLOR, FIG_WIDTH_IN, apply_style, load_counts, minutes, save_fig, save_table
+from utils import (CALLS, COLOR, FS, apply_style, clean, draw_figures, fig_title, fig_width, load_counts, minutes,
+                   save_fig, save_table)
 
 DOW = ["월", "화", "수", "목", "금", "토", "일"]
 
@@ -170,13 +171,15 @@ def _band(ax, x0, x1, y0a, y0b, y1a, y1b, color, alpha=0.18):
 
 
 def fig_status_flow(f):
-    """즉시호출이 어디로 가는가 - 3열 흐름도. 높이 = 건수 비율. 취소 노드는 최종 포기(진한)와 재접수 취소(옅은)로 나눈다."""
+    """즉시호출이 어디로 가는가 - 3열 흐름도. 높이 = 건수 비율. 취소 노드는 최종 포기(진한)와 재접수 취소(옅은)로 나눈다.
+    clean: 노드 이름만. annotated: 건수·비율·중앙값과 제목·주석."""
     import matplotlib.pyplot as plt
     apply_style()
+    ann = not clean()
     n = f.loc["접수", "건수"]
     p = lambda k: f.loc[k, "건수"] / n
-    fig, ax = plt.subplots(figsize=(FIG_WIDTH_IN, 4.0))
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.85, bottom=0.16)
+    fig, ax = plt.subplots(figsize=(fig_width(), 4.0 if ann else 3.0))
+    fig.subplots_adjust(left=0.01, right=0.99, top=0.85 if ann else 0.98, bottom=0.16 if ann else 0.02)
     ax.set_xlim(0, 1); ax.set_ylim(-0.27, 1.02); ax.axis("off")
     W, GAP = 0.03, 0.02                   # 막대 폭, 노드 사이 여백(표면색 간격)
     X = [0.02, 0.29, 0.56]                # 오른쪽 열 레이블은 막대 바깥(오른쪽)에 둔다
@@ -204,7 +207,8 @@ def fig_status_flow(f):
 
     m = lambda k: f.loc[k, "직전 단계부터 중앙값(분)"]
     cnt = lambda k: f"{f.loc[k, '건수']:,}건 ({f.loc[k, '건수'] / n * 100:.1f}%)"
-    LH = 0.072                            # 한 줄 높이(데이터 좌표)
+    LH = 0.072 if ann else 0.085          # 한 줄 높이(데이터 좌표)
+    fs = 7.5 if ann else FS("small")
 
     def block(x, y_top, lines, bold_first=False):
         """여러 줄 레이블. 줄마다 (견본색 또는 None, 문장). 견본은 막대와 같은 색의 작은 사각형."""
@@ -214,30 +218,35 @@ def fig_status_flow(f):
             if sw is not None:
                 ax.add_patch(Rectangle((x, y - 0.019), 0.012, 0.038, facecolor=sw, edgecolor="none"))
                 tx = x + 0.018
-            ax.text(tx, y, s_, ha="left", va="center", fontsize=8 if (bold_first and i == 0) else 7.5,
+            ax.text(tx, y, s_, ha="left", va="center", fontsize=fs + (0.5 if (bold_first and i == 0) else 0),
                     color=COLOR["ink"], fontweight="bold" if (bold_first and i == 0) else "normal")
 
-    block(X[0] + W + 0.008, 0.5 + LH / 2, [(None, "즉시호출 접수"), (None, f"{n:,}건")], bold_first=True)
-    block(X[1] + W + 0.008, top - pd_ / 2 + LH / 2, [(None, f"배차  {cnt('배차')}"),
-                                                     (None, f"접수 후 중앙값 {m('배차'):.1f}분")])
-    block(X[2] + W + 0.012, top - pb / 2 + LH / 2, [(None, f"승차  {cnt('승차')}"),
-                                                    (None, f"배차 후 중앙값 {m('승차'):.1f}분")])
-    block(X[1], y_pre[0] - 0.06, [
-        (None, f"배차 전 취소  {cnt('배차 전 취소')}"),
-        (orange, f"최종 포기 {f.loc['배차 전 최종 포기', '건수']:,}건  접수 후 중앙값 {m('배차 전 최종 포기'):.1f}분"),
-        (orange_lt, f"재접수 {f.loc['배차 전 재접수 취소', '건수']:,}건  접수 후 중앙값 {m('배차 전 재접수 취소'):.1f}분")])
-    block(X[2] + W + 0.012, y_post[1] - 0.01, [
-        (None, f"배차 후 취소  {cnt('배차 후 취소')}"),
-        (orange, f"최종 포기 {f.loc['배차 후 최종 포기', '건수']:,}건  배차 후 중앙값 {m('배차 후 최종 포기'):.1f}분"),
-        (orange_lt, f"재접수 {f.loc['배차 후 재접수 취소', '건수']:,}건  배차 후 중앙값 {m('배차 후 재접수 취소'):.1f}분")])
+    if ann:
+        block(X[0] + W + 0.008, 0.5 + LH / 2, [(None, "즉시호출 접수"), (None, f"{n:,}건")], bold_first=True)
+        block(X[1] + W + 0.008, top - pd_ / 2 + LH / 2, [(None, f"배차  {cnt('배차')}"),
+                                                         (None, f"접수 후 중앙값 {m('배차'):.1f}분")])
+        block(X[2] + W + 0.012, top - pb / 2 + LH / 2, [(None, f"승차  {cnt('승차')}"),
+                                                        (None, f"배차 후 중앙값 {m('승차'):.1f}분")])
+        block(X[1], y_pre[0] - 0.06, [
+            (None, f"배차 전 취소  {cnt('배차 전 취소')}"),
+            (orange, f"최종 포기 {f.loc['배차 전 최종 포기', '건수']:,}건  접수 후 중앙값 {m('배차 전 최종 포기'):.1f}분"),
+            (orange_lt, f"재접수 {f.loc['배차 전 재접수 취소', '건수']:,}건  접수 후 중앙값 {m('배차 전 재접수 취소'):.1f}분")])
+        block(X[2] + W + 0.012, y_post[1] - 0.01, [
+            (None, f"배차 후 취소  {cnt('배차 후 취소')}"),
+            (orange, f"최종 포기 {f.loc['배차 후 최종 포기', '건수']:,}건  배차 후 중앙값 {m('배차 후 최종 포기'):.1f}분"),
+            (orange_lt, f"재접수 {f.loc['배차 후 재접수 취소', '건수']:,}건  배차 후 중앙값 {m('배차 후 재접수 취소'):.1f}분")])
+    else:
+        block(X[0] + W + 0.012, 0.5, [(None, "즉시호출 접수")], bold_first=True)
+        block(X[1] + W + 0.012, top - pd_ / 2, [(None, "배차")])
+        block(X[2] + W + 0.015, top - pb / 2, [(None, "승차")])
+        block(X[1], y_pre[0] - 0.07, [(None, "배차 전 취소"), (orange, "최종 포기"), (orange_lt, "재접수 취소")])
+        block(X[2] + W + 0.015, y_post[1] - 0.01, [(None, "배차 후 취소"), (orange, "최종 포기"), (orange_lt, "재접수 취소")])
 
     canc, fin = f.loc["취소 전체", "건수"], f.loc["최종 포기 전체", "건수"]
-    fig.text(0.01, 0.97, f"즉시호출 {n / 1e4:.1f}만 건 중 {canc / 1e4:.1f}만 건이 취소됐고, "
-                         f"{fin / 1e4:.1f}만 건({fin / n * 100:.1f}%)은 다시 부르지 않았다",
-             fontsize=10, fontweight="bold", color=COLOR["ink"], va="top")
-    fig.text(0.01, 0.905, "장애인콜택시 즉시호출의 처리 흐름(2025년, 서울 출발). 띠의 높이 = 건수 비율. "
-                          "취소 막대의 진한 색 = 최종 포기, 옅은 색 = 재접수",
-             fontsize=7.5, color=COLOR["ink2"], va="top")
+    fig_title(fig, f"즉시호출 {n / 1e4:.1f}만 건 중 {canc / 1e4:.1f}만 건이 취소됐고, "
+                   f"{fin / 1e4:.1f}만 건({fin / n * 100:.1f}%)은 다시 부르지 않았다",
+              "장애인콜택시 즉시호출의 처리 흐름(2025년, 서울 출발). 띠의 높이 = 건수 비율. "
+              "취소 막대의 진한 색 = 최종 포기, 옅은 색 = 재접수", y=0.97)
     note = ("주: 재접수 = 취소 후 30분 안에 같은 출발동·목적동·장애유형으로 새 접수가 들어온 경우(이용자 ID가 없어 쓴 대리 기준.\n"
             "    같은 규칙을 승차 콜에 적용하면 우연 일치는 약 2%). "
             f"기타 실패 {f.loc['기타 실패', '건수']:,}건, 상태 불명 {f.loc['상태 불명', '건수']:,}건, "
@@ -254,29 +263,30 @@ def fig_recall_timing(imm):
     """부록: 배차 후 취소 -> 같은 조건 재접수까지 걸린 시간(1분 구간). 공단의 '배차 후 취소 시 10분 접수 제한' 규정이 보인다."""
     import matplotlib.pyplot as plt
     apply_style()
+    ann = not clean()
     g = imm.loc[imm.is_post & imm.recall_60, "recall_gap_min"]
     n_post = int(imm.is_post.sum())
     k = np.floor(g).astype(int).value_counts().reindex(range(60), fill_value=0)
     spike = int(k.loc[10])
-    fig, ax = plt.subplots(figsize=(FIG_WIDTH_IN, 2.9))
-    fig.subplots_adjust(left=0.09, right=0.98, top=0.76, bottom=0.27)
+    fig, ax = plt.subplots(figsize=(fig_width(), 2.9 if ann else 2.6))
+    fig.subplots_adjust(left=0.09, right=0.98, top=0.76 if ann else 0.97, bottom=0.27 if ann else 0.18)
     colors = [COLOR["board"] if i == 10 else "#9ec5f4" for i in k.index]
     ax.bar(k.index + 0.5, k.values, width=0.8, color=colors, zorder=2)
     ax.axvline(10, color=COLOR["ink2"], lw=0.8, zorder=3)
-    ax.text(11.6, spike * 0.97, f"취소 후 10~11분: {spike:,}건\n(재접수의 {spike / len(g) * 100:.0f}%)",
-            fontsize=7.2, color=COLOR["ink"], va="top")
-    ax.text(9.6, spike * 0.97, "접수 제한\n10분", fontsize=7, color=COLOR["ink2"], va="top", ha="right")
+    if ann:
+        ax.text(11.6, spike * 0.97, f"취소 후 10~11분: {spike:,}건\n(재접수의 {spike / len(g) * 100:.0f}%)",
+                fontsize=7.2, color=COLOR["ink"], va="top")
+        ax.text(9.6, spike * 0.97, "접수 제한\n10분", fontsize=7, color=COLOR["ink2"], va="top", ha="right")
     ax.set_xlim(0, 60)
     ax.set_xticks(range(0, 61, 10))
-    ax.set_xlabel("배차 후 취소 → 같은 조건 재접수까지 걸린 시간(분)")
-    ax.set_ylabel("건수")
+    ax.set_xlabel("배차 후 취소에서 같은 조건 재접수까지 걸린 시간(분)")
+    ax.set_ylabel("재접수 건수")
     ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:,.0f}"))
     ax.grid(axis="y"); ax.set_axisbelow(True); ax.tick_params(length=0)
-    fig.text(0.01, 0.97, "배차 후 취소한 사람은 '10분 접수 제한'이 풀리자마자 다시 불렀다",
-             fontsize=10, fontweight="bold", color=COLOR["ink"], va="top")
-    fig.text(0.01, 0.875, f"즉시호출 배차 후 취소 {n_post:,}건 중 60분 안에 같은 조건으로 다시 부른 {len(g):,}건의 재접수 시각",
-             fontsize=7.8, color=COLOR["ink2"], va="top")
-    note = ("주: 같은 조건 = 같은 출발동·목적동·장애유형(이용자 ID가 없어 쓴 대리 기준). "
+    fig_title(fig, "배차 후 취소한 사람은 '10분 접수 제한'이 풀리자마자 다시 불렀다",
+              f"즉시호출 배차 후 취소 {n_post:,}건 중 60분 안에 같은 조건으로 다시 부른 {len(g):,}건의 재접수 시각. "
+              f"취소 후 10~11분: {spike:,}건(재접수의 {spike / len(g) * 100:.0f}%)", y=0.97, y_sub=0.875)
+    note = ("주: 같은 조건 = 같은 출발동·목적동·장애유형(이용자 ID가 없어 쓴 대리 기준). 세로선 = 취소 후 10분. "
             "규정: \"차량배차 후 취소 시에는 10분 간 콜 접수가 제한됩니다\"\n"
             f"    (서울시설공단 장애인콜택시 이용수칙, {RULE_URL}, 2026-10-06 확인).")
     save_fig(fig, "fig_A1_recall_timing.png", note=note)
@@ -294,8 +304,8 @@ def main():
     scheduled_appendix(df)
     f = flow_counts(imm)
     print("\n", f.to_string())
-    fig_status_flow(f)
-    fig_recall_timing(imm)
+    draw_figures(fig_status_flow, f)
+    draw_figures(fig_recall_timing, imm)
     print(f"[02_descriptive] 완료 {time.time() - t0:.0f}초")
 
 

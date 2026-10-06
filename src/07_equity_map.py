@@ -15,8 +15,8 @@ import numpy as np
 import pandas as pd
 
 from survival import discrete_cif
-from utils import (CALLS, COLOR, DATA_PROC, FIG_WIDTH_IN, HOUR_GROUPS, MAP_UNITS, apply_style, load_counts, save_fig,
-                   save_table)
+from utils import (CALLS, COLOR, DATA_PROC, FS, HOUR_GROUPS, MAP_UNITS, apply_style, clean, draw_figures, fig_title,
+                   fig_width, load_counts, save_fig, save_table)
 
 H = 60
 M_SHRINK = 50
@@ -119,45 +119,58 @@ def _draw(ax, units, gu, vals, gray, bins, colors, flag=None):
     ax.set_aspect("equal")
 
 
-def _legend(fig, x0, y0, bins, colors, label, w=0.05, h=0.022, fmt="{:.0f}"):
+def _legend(fig, x0, y0, bins, colors, label, w=0.05, h=0.022, fmt="{:.0f}", fs=6.3):
+    from matplotlib.patches import Rectangle
     for i, c in enumerate(colors):
-        fig.patches.append(__import__("matplotlib").patches.Rectangle((x0 + i * w, y0), w - 0.003, h, color=c,
-                                                                       transform=fig.transFigure, figure=fig))
+        fig.patches.append(Rectangle((x0 + i * w, y0), w - 0.003, h, color=c, transform=fig.transFigure, figure=fig))
         lab = f"<{bins[1]}" if i == 0 else (f"≥{bins[i]}" if i == len(colors) - 1 else fmt.format(bins[i]))
-        fig.text(x0 + i * w + (w - 0.003) / 2, y0 - 0.008, lab, ha="center", va="top", fontsize=6.3, color=COLOR["ink2"])
-    fig.text(x0, y0 + h + 0.008, label, fontsize=6.8, color=COLOR["ink2"], va="bottom")
+        fig.text(x0 + i * w + (w - 0.003) / 2, y0 - 0.008, lab, ha="center", va="top", fontsize=fs, color=COLOR["ink2"])
+    fig.text(x0, y0 + h + 0.008, label, fontsize=fs + 0.5, color=COLOR["ink2"], va="bottom")
+
+
+def _key(fig, x, y, text, fs, **patch):
+    """그림 좌표에 작은 견본 사각형 + 설명(지도 범례용)."""
+    from matplotlib.patches import Rectangle
+    fig.patches.append(Rectangle((x, y), 0.03, 0.022, transform=fig.transFigure, figure=fig, **patch))
+    fig.text(x + 0.037, y + 0.011, text, fontsize=fs, color=COLOR["ink2"], va="center")
 
 
 def fig_equity(t, units, gu, s):
     import matplotlib.pyplot as plt
     apply_style()
+    ann = not clean()
     cnt = load_counts()
     n = t[t["시간대"] == "야간(20~01시)"]
-    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, 4.2), gridspec_kw={"wspace": 0.02})
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.78, bottom=0.27)
+    fig, axes = plt.subplots(1, 2, figsize=(fig_width(), 4.2 if ann else 3.3), gridspec_kw={"wspace": 0.02})
+    if ann:
+        fig.subplots_adjust(left=0.01, right=0.99, top=0.78, bottom=0.27)
+    else:
+        fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.22)
     panels = [("naive KM 60분 내 승차%(수축)", "표시_naive(50건 이상·naive승차60<50%)",
-               f"선행연구 방식(취소 = 중도절단): 50% 미만 {s['big_naive']}곳"),
-              ("60분 내 승차%(수축)", "표시(50건 이상·승차60<50%)", f"경쟁위험(취소 = 경쟁사건): 50% 미만 {s['big_aj']}곳")]
-    for ax, (col, flag, title) in zip(axes, panels):
+               f"선행연구 방식(취소 = 중도절단): 50% 미만 {s['big_naive']}곳", "(가) 선행연구 방식(취소 = 중도절단)"),
+              ("60분 내 승차%(수축)", "표시(50건 이상·승차60<50%)",
+               f"경쟁위험(취소 = 경쟁사건): 50% 미만 {s['big_aj']}곳", "(나) 경쟁위험(취소 = 경쟁사건)")]
+    for ax, (col, flag, title_a, title_c) in zip(axes, panels):
         vals = pd.DataFrame({"unit_id": n["unit_id"], "v": n[col], "gray": n["회색(20건 미만)"], "flag": n[flag]})
         _draw(ax, units, gu, vals, None, BLUE_BINS, BLUE, flag=True)
-        ax.set_title(title, loc="left", fontsize=8.3, pad=2)
-    _legend(fig, 0.06, 0.225, BLUE_BINS, BLUE, "야간 60분 안에 승차한 비율(%)")
-    fig.patches.append(__import__("matplotlib").patches.Rectangle((0.52, 0.225), 0.03, 0.022, facecolor="white",
-                       edgecolor=COLOR["ink"], linewidth=0.9, transform=fig.transFigure, figure=fig))
-    fig.text(0.555, 0.236, "= 콜 50건 이상이면서 50% 미만", fontsize=6.8, color=COLOR["ink2"], va="center")
-    fig.patches.append(__import__("matplotlib").patches.Rectangle((0.52, 0.19), 0.03, 0.022, color=GRAY,
-                       transform=fig.transFigure, figure=fig))
-    fig.text(0.555, 0.201, f"= 야간 콜 {N_GRAY}건 미만({s['n_gray']}곳)", fontsize=6.8, color=COLOR["ink2"], va="center")
-    fig.text(0.01, 0.975, f"선행연구 방식은 문제를 가린다: 밤에 60분 안에 절반도 못 타는 동 {s['big_aj']}곳이 "
-                          f"{s['big_naive']}곳으로 보인다", fontsize=10, fontweight="bold", color=COLOR["ink"], va="top")
-    fig.text(0.01, 0.915, f"야간(20~01시) 즉시호출 {cnt['imm_night_n']:,}건, 지도 단위 {s['n_units']}곳. "
-                          f"두 지도는 같은 데이터·같은 색 척도이고, 취소를 처리하는 방식만 다르다",
-             fontsize=7.6, color=COLOR["ink2"], va="top")
+        ax.set_title(title_a if ann else title_c, loc="left", fontsize=8.3 if ann else None, pad=2)
+    if ann:
+        _legend(fig, 0.06, 0.225, BLUE_BINS, BLUE, "야간 60분 안에 승차한 비율(%)")
+        _key(fig, 0.52, 0.225, "= 콜 50건 이상이면서 50% 미만", 6.8, facecolor="white", edgecolor=COLOR["ink"], linewidth=0.9)
+        _key(fig, 0.52, 0.19, f"= 야간 콜 {N_GRAY}건 미만({s['n_gray']}곳)", 6.8, color=GRAY)
+    else:
+        fs = FS("small")
+        _legend(fig, 0.02, 0.085, BLUE_BINS, BLUE, "야간 60분 안에 승차한 비율(%)", w=0.06, h=0.03, fs=fs)
+        _key(fig, 0.5, 0.11, "콜 50건 이상이면서 50% 미만", fs, facecolor="white", edgecolor=COLOR["ink"], linewidth=0.9)
+        _key(fig, 0.5, 0.06, f"야간 콜 {N_GRAY}건 미만", fs, color=GRAY)
+    fig_title(fig, f"선행연구 방식은 문제를 가린다: 밤에 60분 안에 절반도 못 타는 동 {s['big_aj']}곳이 "
+                   f"{s['big_naive']}곳으로 보인다",
+              f"야간(20~01시) 즉시호출 {cnt['imm_night_n']:,}건, 지도 단위 {s['n_units']}곳. "
+              "두 지도는 같은 데이터·같은 색 척도이고, 취소를 처리하는 방식만 다르다", y_sub=0.915)
     note = (f"주: {s['big_aj']}곳·{s['big_naive']}곳은 야간 콜 {N_FLAG}건 이상인 {s['n_big']}곳 중 원값 기준(콜 수와 무관하게 세면 "
             f"{s['all_aj']}곳 vs {s['all_naive']}곳).\n"
             f"    굵은 테두리 {s['big_aj']}곳의 야간 60분 내 최종 포기 확률은 평균 {s['flag_abandon_mean']:.1f}%. "
-            f"색은 같은 구 야간 값 쪽으로 수축한 값(w = n/(n+{M_SHRINK})).\n"
+            f"색은 같은 구 야간 값 쪽으로 수축한 값(w = n/(n+{M_SHRINK})). 회색 = 야간 콜 {N_GRAY}건 미만({s['n_gray']}곳).\n"
             f"    선행연구 방식 KM으로는 승차 중앙값이 없는 '빈칸'이 {s['naive_med_missing']}곳뿐이어서, 빈칸 대신 같은 지표(60분 내 승차)로 비교함.\n"
             "    지도 단위 = 출발동을 시점별 행정동 경계로 2025-12-31 경계에 대응(통계청 SGIS 경계, vuski/admdongkor 가공, CC BY 4.0).")
     save_fig(fig, "fig_06_equity_map.png", note=note)
@@ -167,18 +180,33 @@ def fig_equity(t, units, gu, s):
 def fig_day_night(t, units, gu):
     import matplotlib.pyplot as plt
     apply_style()
-    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, 3.7), gridspec_kw={"wspace": 0.02})
-    fig.subplots_adjust(left=0.01, right=0.99, top=0.82, bottom=0.22)
-    for ax, grp in zip(axes, ["주간(10~14시)", "야간(20~01시)"]):
+    ann = not clean()
+    fig, axes = plt.subplots(1, 2, figsize=(fig_width(), 3.7 if ann else 3.2), gridspec_kw={"wspace": 0.02})
+    if ann:
+        fig.subplots_adjust(left=0.01, right=0.99, top=0.82, bottom=0.22)
+    else:
+        fig.subplots_adjust(left=0.01, right=0.99, top=0.93, bottom=0.2)
+    meds = {}
+    for i, (ax, grp) in enumerate(zip(axes, ["주간(10~14시)", "야간(20~01시)"])):
         d = t[t["시간대"] == grp]
         vals = pd.DataFrame({"unit_id": d["unit_id"], "v": d["60분 내 최종 포기%(수축)"], "gray": d["회색(20건 미만)"]})
         _draw(ax, units, gu, vals, None, ORANGE_BINS, ORANGE)
-        big = d[d["n"] >= N_FLAG]
-        ax.set_title(f"{grp}: 동 중앙값 {big['60분 내 최종 포기%(원값)'].median():.1f}%", loc="left", fontsize=8.3, pad=4)
-    _legend(fig, 0.06, 0.17, ORANGE_BINS, ORANGE, "60분 안에 최종 포기한 비율(%)")
-    fig.text(0.01, 0.975, "같은 동이라도 밤에 부르면 포기가 훨씬 많다", fontsize=10, fontweight="bold", color=COLOR["ink"], va="top")
+        meds[grp] = d[d["n"] >= N_FLAG]["60분 내 최종 포기%(원값)"].median()
+        if ann:
+            ax.set_title(f"{grp}: 동 중앙값 {meds[grp]:.1f}%", loc="left", fontsize=8.3, pad=4)
+        else:
+            ax.set_title(["(가) 주간 10~14시", "(나) 야간 20~01시"][i], loc="left", pad=2)
+    if ann:
+        _legend(fig, 0.06, 0.17, ORANGE_BINS, ORANGE, "60분 안에 최종 포기한 비율(%)")
+    else:
+        fs = FS("small")
+        _legend(fig, 0.02, 0.08, ORANGE_BINS, ORANGE, "60분 안에 최종 포기한 비율(%)", w=0.06, h=0.03, fs=fs)
+        _key(fig, 0.5, 0.08, f"콜 {N_GRAY}건 미만", fs, color=GRAY)
+    fig_title(fig, "같은 동이라도 밤에 부르면 포기가 훨씬 많다",
+              f"콜 {N_FLAG}건 이상인 동의 60분 내 최종 포기 중앙값: 주간 {meds['주간(10~14시)']:.1f}%, 야간 {meds['야간(20~01시)']:.1f}%")
     note = (f"주: 즉시호출, 경쟁위험(1분 이산 Aalen-Johansen) 60분 내 최종 포기 누적확률.\n"
-            f"    색은 같은 구·같은 시간대 값 쪽으로 수축(w = n/(n+{M_SHRINK})), 회색 = 콜 {N_GRAY}건 미만. 제목의 중앙값은 콜 {N_FLAG}건 이상인 동의 원값 기준. 최종 포기 = 취소 후 30분 안에 같은 출발동·목적동·장애유형 재접수가 없는 취소.")
+            f"    색은 같은 구·같은 시간대 값 쪽으로 수축(w = n/(n+{M_SHRINK})), 회색 = 콜 {N_GRAY}건 미만. 중앙값은 콜 {N_FLAG}건 이상인 동의 원값 기준. "
+            "최종 포기 = 취소 후 30분 안에 같은 출발동·목적동·장애유형 재접수가 없는 취소.")
     save_fig(fig, "fig_A3_abandon_day_night.png", note=note)
     plt.close(fig)
 
@@ -194,8 +222,8 @@ def main():
     t = compute(imm, units)
     rank_tables(t)
     s = summary_counts(t)
-    fig_equity(t, units, gu, s)
-    fig_day_night(t, units, gu)
+    draw_figures(fig_equity, t, units, gu, s)
+    draw_figures(fig_day_night, t, units, gu)
     print(f"[07_equity_map] 완료 {time.time() - t0:.0f}초")
 
 

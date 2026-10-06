@@ -24,7 +24,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import roc_auc_score
 
 import features as F
-from utils import (CALLS, COLOR, FIG_WIDTH_IN, MODELS, SEED, apply_style, load_counts, parse_sample_flag, save_fig,
+from utils import (CALLS, COLOR, FS, MODELS, SEED, apply_style, clean, draw_figures, fig_title, fig_width, load_counts,
+                   parse_sample_flag, save_fig,
                    save_table)
 
 SAMPLE = parse_sample_flag()
@@ -193,21 +194,31 @@ def shap_top(bst, feats, pp_te):
 
 
 def fig_shap(t, n_rows):
+    """clean: 두 클래스를 위아래로(14cm 폭에서 피처 이름이 읽히도록), 막대 값 표시 없음."""
     import matplotlib.pyplot as plt
     apply_style()
-    fig, axes = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, 3.7), gridspec_kw={"wspace": 0.95})
-    fig.subplots_adjust(left=0.235, right=0.965, top=0.8, bottom=0.25)
+    ann = not clean()
+    if ann:
+        fig, axes = plt.subplots(1, 2, figsize=(fig_width(), 3.7), gridspec_kw={"wspace": 0.95})
+        fig.subplots_adjust(left=0.235, right=0.965, top=0.8, bottom=0.25)
+    else:
+        fig, axes = plt.subplots(2, 1, figsize=(fig_width(), 5.2), gridspec_kw={"hspace": 0.45})
+        fig.subplots_adjust(left=0.36, right=0.97, top=0.95, bottom=0.08)
+    names = {"배차": "(가) 배차 해저드", "최종 포기": "(나) 최종 포기 해저드"}
     for ax, (cls, color) in zip(axes, [("배차", COLOR["board"]), ("최종 포기", COLOR["cancel"])]):
         d = t[(t["클래스"] == cls) & (t["순위"] <= 10)].sort_values("순위", ascending=False)
-        ax.barh(d["피처(한글)"], d["평균|SHAP|"], height=0.6, color=color, zorder=2)
-        for y, v in enumerate(d["평균|SHAP|"]):
-            ax.text(v, y, f" {v:.2f}", va="center", fontsize=6.5, color=COLOR["ink2"])
-        ax.set_title(f"'{cls}' 해저드", loc="left", fontsize=8.5)
+        labels = d["피처(한글)"] if ann else d["피처(한글)"].str.rstrip("*")
+        ax.barh(labels, d["평균|SHAP|"], height=0.6, color=color, zorder=2)
+        if ann:
+            for y, v in enumerate(d["평균|SHAP|"]):
+                ax.text(v, y, f" {v:.2f}", va="center", fontsize=6.5, color=COLOR["ink2"])
+            ax.set_title(f"'{cls}' 해저드", loc="left", fontsize=8.5)
+        else:
+            ax.set_title(names[cls], loc="left", pad=4)
         ax.set_xlabel("평균 |SHAP| (로짓 단위)")
         ax.grid(axis="x"); ax.set_axisbelow(True); ax.tick_params(length=0)
-        ax.set_xlim(0, d["평균|SHAP|"].max() * 1.25)
-    fig.text(0.01, 0.97, TITLE_SHAP,
-             fontsize=9.5, fontweight="bold", color=COLOR["ink"], va="top")
+        ax.set_xlim(0, d["평균|SHAP|"].max() * (1.25 if ann else 1.08))
+    fig_title(fig, TITLE_SHAP, title_size=9.5, y=0.97)
     note = (f"주: Stage 1(접수→배차) 5분 이산시간 LightGBM 다중분류 해저드. 테스트 기간(10~12월) person-period {n_rows:,}행에서 "
             "LightGBM 내장\n    TreeSHAP으로 계산한 클래스별 평균 |SHAP| 상위 10개. * 학습 구간(1~8월) 콜로 계산한 출발동 비율(같은 구 쪽으로 수축).\n"
             "    재접수 여부·차량구분은 피처로 쓰지 않음. SHAP은 연관의 크기이며 인과 효과가 아님.")
@@ -216,27 +227,45 @@ def fig_shap(t, n_rows):
 
 
 def fig_calibration(calib, best):
+    """clean: 2 x 2 배치(14cm 폭에서 눈금이 읽히도록)."""
     import matplotlib.pyplot as plt
     apply_style()
-    fig, axes = plt.subplots(1, 4, figsize=(FIG_WIDTH_IN, 2.5), gridspec_kw={"wspace": 0.45})
-    fig.subplots_adjust(left=0.07, right=0.98, top=0.72, bottom=0.27)
-    for ax, (cls, t) in zip(axes, [("배차", 30), ("배차", 60), ("최종 포기", 30), ("최종 포기", 60)]):
+    ann = not clean()
+    if ann:
+        fig, axes = plt.subplots(1, 4, figsize=(fig_width(), 2.5), gridspec_kw={"wspace": 0.45})
+        fig.subplots_adjust(left=0.07, right=0.98, top=0.72, bottom=0.27)
+    else:
+        fig, axes = plt.subplots(2, 2, figsize=(fig_width(), 4.6), gridspec_kw={"wspace": 0.3, "hspace": 0.55})
+        fig.subplots_adjust(left=0.1, right=0.98, top=0.94, bottom=0.1)
+        axes = axes.ravel()
+    panels = [("배차", 30), ("배차", 60), ("최종 포기", 30), ("최종 포기", 60)]
+    for i, (ax, (cls, t)) in enumerate(zip(axes, panels)):
         for name, color in [(best, COLOR["board"] if cls == "배차" else COLOR["cancel"]),
                             ("기준선(a) 구간×시각", COLOR["muted"])]:
             d = calib[(calib["모형"] == name) & (calib["원인"] == cls) & (calib["t(분)"] == t)]
             ax.plot(d["예측 CIF%"], d["실제%"], "o-", ms=3.5, lw=1.2, color=color, mec=COLOR["surface"], mew=0.8,
-                    label="해저드 모형" if name == best else "기준선(a)")
+                    label="해저드 모형" if name == best else "기준선(a) 경과 구간×접수 시각")
         hi = calib[(calib["원인"] == cls) & (calib["t(분)"] == t)][["예측 CIF%", "실제%"]].max().max() * 1.05
         ax.plot([0, hi], [0, hi], color=COLOR["axis"], lw=0.8, zorder=0)
         ax.set_xlim(0, hi); ax.set_ylim(0, hi)
-        ax.set_title(f"{cls} {t}분", loc="left", fontsize=8)
-        ax.tick_params(length=0, labelsize=6.5)
-        ax.set_xlabel("예측(%)", fontsize=7)
-    axes[0].set_ylabel("실제(%)", fontsize=7)
-    axes[0].legend(fontsize=6.5, loc="upper left")
-    fig.text(0.01, 0.97, "십분위 보정도: 예측한 누적확률과 실제 비율(테스트 10~12월)", fontsize=9.5, fontweight="bold",
-             color=COLOR["ink"], va="top")
-    save_fig(fig, "fig_A2_calibration.png", note="주: 접수 시점 피처로 예측한 원인별 누적발생확률을 십분위로 나눠 실제 비율과 비교. 대각선 = 완전 보정.")
+        if ann:
+            ax.set_title(f"{cls} {t}분", loc="left", fontsize=8)
+            ax.tick_params(length=0, labelsize=6.5)
+            ax.set_xlabel("예측(%)", fontsize=7)
+        else:
+            ax.set_title(f"({'가나다라'[i]}) {cls}, {t}분 누적확률", loc="left", pad=4)
+            ax.tick_params(length=0)
+            ax.set_xlabel("예측(%)")
+            ax.set_ylabel("실제(%)")
+    if ann:
+        axes[0].set_ylabel("실제(%)", fontsize=7)
+        axes[0].legend(fontsize=6.5, loc="upper left")
+    else:
+        for k in (0, 2):                       # 줄마다 모형 선 색이 달라(배차 파랑, 최종 포기 주황) 줄의 첫 패널에 범례
+            axes[k].legend(loc="upper left", handlelength=1.6, borderaxespad=0.2, fontsize=FS("small") - 0.5)
+    fig_title(fig, "십분위 보정도: 예측한 누적확률과 실제 비율(테스트 10~12월)", title_size=9.5, y=0.97)
+    save_fig(fig, "fig_A2_calibration.png",
+             note="주: 접수 시점 피처로 예측한 원인별 누적발생확률을 십분위로 나눠 실제 비율과 비교. 대각선 = 완전 보정.")
     plt.close(fig)
 
 
@@ -308,8 +337,8 @@ def main():
     rf_baseline(imm, load, preds[best][0])
     st = shap_top(bst, feats, pp["test"])
     print(st[st["순위"] <= 10][["클래스", "순위", "피처(한글)", "평균|SHAP|"]].to_string(index=False))
-    fig_shap(st, min(30_000, len(pp["test"])))
-    fig_calibration(calib, best)
+    draw_figures(fig_shap, st, min(30_000, len(pp["test"])))
+    draw_figures(fig_calibration, calib, best)
     case_examples(bst, feats, imm, load)
     print(f"[06_hazard_model] 완료 {time.time() - t_all:.0f}초{' (--sample)' if SAMPLE else ''}")
 

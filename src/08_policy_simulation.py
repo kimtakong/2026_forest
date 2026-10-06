@@ -23,7 +23,8 @@ import numpy as np
 import pandas as pd
 
 import features as F
-from utils import COLOR, FIG_WIDTH_IN, MODELS, NIGHT_HOURS, apply_style, save_fig, save_table
+from utils import (COLOR, MODELS, NIGHT_HOURS, apply_style, clean, draw_figures, fig_title, fig_width, save_fig,
+                   save_table)
 
 hm = importlib.import_module("06_hazard_model")      # 06단계와 같은 데이터 준비·예측 함수를 그대로 쓴다
 
@@ -129,7 +130,8 @@ def main():
     pd.set_option("display.width", 250)
     print(t.drop(columns=["전환 대상 콜 수", "배차 전 최종 포기 콜 수"], errors="ignore").round(2).to_string(index=False))
 
-    fig_policy(test, curve, a_all, metrics(test, flag_a, groups["야간(20~01시)"], n_days), th_match, flag_a, flag_b, groups)
+    draw_figures(fig_policy, test, curve, a_all, metrics(test, flag_a, groups["야간(20~01시)"], n_days), th_match,
+                 flag_a, flag_b, groups)
     print(f"[08_policy_simulation] 완료 {time.time() - t0:.0f}초")
 
 
@@ -137,8 +139,13 @@ def fig_policy(test, curve, a_all, a_night, th_match, flag_a, flag_b, groups):
     import matplotlib.pyplot as plt
     from matplotlib.ticker import FuncFormatter
     apply_style()
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(FIG_WIDTH_IN, 3.5), gridspec_kw={"wspace": 0.3, "width_ratios": [1, 1.25]})
-    fig.subplots_adjust(left=0.095, right=0.98, top=0.76, bottom=0.29)
+    ann = not clean()
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(fig_width(), 3.5 if ann else 3.2),
+                                 gridspec_kw={"wspace": 0.3, "width_ratios": [1, 1.25]})
+    if ann:
+        fig.subplots_adjust(left=0.095, right=0.98, top=0.76, bottom=0.29)
+    else:
+        fig.subplots_adjust(left=0.12, right=0.98, top=0.78, bottom=0.16)
     blue, gray = COLOR["board"], COLOR["ink2"]
     pct = FuncFormatter(lambda v, _: f"{v:.0f}%")
     rc, dc = "재현율%(배차 전 최종 포기를 취소 전에 잡음)", "하루 평균 전환 대상(건)"
@@ -146,20 +153,23 @@ def fig_policy(test, curve, a_all, a_night, th_match, flag_a, flag_b, groups):
     c = curve[curve["집단"] == "전체"].sort_values(dc)
     a1.plot(c[dc], c[rc], color=blue, lw=2, label="B 동적 규칙(θ를 바꿔 가며)")
     m = c.loc[(c["θ"] - th_match).abs().idxmin()]
-    a1.plot([m[dc]], [m[rc]], "o", ms=6, color=blue, mec=COLOR["surface"], mew=1.2, zorder=4)
-    a1.plot([a_all[dc]], [a_all[rc]], "o", ms=6, color=gray, mec=COLOR["surface"], mew=1.2, zorder=4)
-    a1.annotate(f"A 현행 60분 규칙\n하루 {a_all[dc]:.0f}건, 재현율 {a_all[rc]:.0f}%", xy=(a_all[dc], a_all[rc]),
-                xytext=(a_all[dc] * 1.45, max(a_all[rc] - 9, 2)), fontsize=7, color=COLOR["ink"],
-                arrowprops=dict(arrowstyle="-", color=COLOR["muted"], lw=0.6))
-    a1.annotate(f"B (θ = {th_match:.3f})\n같은 건수, 재현율 {m[rc]:.0f}%", xy=(m[dc], m[rc]),
-                xytext=(m[dc] * 1.45, m[rc] - 12), fontsize=7, color=COLOR["ink"],
-                arrowprops=dict(arrowstyle="-", color=COLOR["muted"], lw=0.6))
+    a1.plot([m[dc]], [m[rc]], "o", ms=6, color=blue, mec=COLOR["surface"], mew=1.2, zorder=4,
+            label="B 동적 규칙(A와 같은 하루 건수)")
+    a1.plot([a_all[dc]], [a_all[rc]], "o", ms=6, color=gray, mec=COLOR["surface"], mew=1.2, zorder=4,
+            label="A 현행 60분 규칙")
+    if ann:
+        a1.annotate(f"A 현행 60분 규칙\n하루 {a_all[dc]:.0f}건, 재현율 {a_all[rc]:.0f}%", xy=(a_all[dc], a_all[rc]),
+                    xytext=(a_all[dc] * 1.45, max(a_all[rc] - 9, 2)), fontsize=7, color=COLOR["ink"],
+                    arrowprops=dict(arrowstyle="-", color=COLOR["muted"], lw=0.6))
+        a1.annotate(f"B (θ = {th_match:.3f})\n같은 건수, 재현율 {m[rc]:.0f}%", xy=(m[dc], m[rc]),
+                    xytext=(m[dc] * 1.45, m[rc] - 12), fontsize=7, color=COLOR["ink"],
+                    arrowprops=dict(arrowstyle="-", color=COLOR["muted"], lw=0.6))
     a1.set_xlim(0, min(c[dc].max(), a_all[dc] * 4))
     a1.set_ylim(0, 100)
     a1.yaxis.set_major_formatter(pct)
     a1.set_xlabel("하루 평균 전환 대상(건)")
-    a1.set_ylabel("배차 전 최종 포기를 미리 잡은 비율")
-    a1.set_title("(가) 운영 부담 대비 조기 탐지", loc="left", fontsize=8.5)
+    a1.set_ylabel("배차 전 최종 포기를\n미리 잡은 비율" if not ann else "배차 전 최종 포기를 미리 잡은 비율")
+    a1.set_title("(가) 운영 부담 대비 조기 탐지", loc="left", fontsize=8.5 if ann else None, pad=4)
     a1.grid(axis="y"); a1.set_axisbelow(True); a1.tick_params(length=0)
 
     T, E = test.T1.to_numpy(), test.E1_ab.to_numpy()
@@ -174,24 +184,29 @@ def fig_policy(test, curve, a_all, a_night, th_match, flag_a, flag_b, groups):
     a2.axvspan(19.5, 23.5, color="#f0efec", lw=0, zorder=0)
     a2.axvspan(-0.5, 1.5, color="#f0efec", lw=0, zorder=0)
     a2.plot(r.index, r["A"], color=gray, lw=2, label="A 현행 60분 규칙")
-    a2.plot(r.index, r["B"], color=blue, lw=2, label=f"B 동적 규칙(같은 하루 건수)")
+    a2.plot(r.index, r["B"], color=blue, lw=2, label="B 동적 규칙(같은 하루 건수)")
     a2.set_xlim(-0.5, 23.5); a2.set_xticks(range(0, 24, 3)); a2.set_ylim(0, 100)
     a2.yaxis.set_major_formatter(pct)
     a2.set_xlabel("접수 시간대(시)")
-    a2.set_title("(나) 시간대별 조기 탐지 비율(음영 = 야간)", loc="left", fontsize=8.5)
-    a2.legend(loc="upper center", fontsize=6.8, ncol=2)
+    a2.set_title("(나) 시간대별 조기 탐지 비율(음영 = 야간)" if ann else "(나) 시간대별 조기 탐지 비율", loc="left",
+                 fontsize=8.5 if ann else None, pad=4)
+    if ann:
+        a2.legend(loc="upper center", fontsize=6.8, ncol=2)
+    else:
+        h1, l1 = a1.get_legend_handles_labels()
+        fig.legend(h1, l1, loc="upper left", bbox_to_anchor=(0.1, 1.0), ncol=2, handlelength=1.6, columnspacing=1.2)
     a2.grid(axis="y"); a2.set_axisbelow(True); a2.tick_params(length=0)
 
     b_all = curve[(curve["집단"] == "전체") & (curve["θ"] == m["θ"])].iloc[0]
     earlier = b_all["미리 잡은 시간 중앙값(분)"] > a_all["미리 잡은 시간 중앙값(분)"]
-    fig.text(0.01, 0.975, f"같은 운영 부담으로 모형 기반 규칙은 포기를 {b_all[rc] / max(a_all[rc], 1e-9):.1f}배 더 많이"
-                          + (", 더 일찍 잡아낸다" if earlier else " 잡아낸다"), fontsize=10, fontweight="bold",
-             color=COLOR["ink"], va="top")
-    fig.text(0.01, 0.9, f"하루 {a_all[dc]:.0f}건 기준 재현율: 현행 {a_all[rc]:.1f}% → 동적 {b_all[rc]:.1f}%, "
-                        f"미리 잡은 시간 중앙값: 현행 {a_all['미리 잡은 시간 중앙값(분)']:.0f}분 → 동적 {b_all['미리 잡은 시간 중앙값(분)']:.0f}분",
-             fontsize=7.6, color=COLOR["ink2"], va="top")
+    fig_title(fig, f"같은 운영 부담으로 모형 기반 규칙은 포기를 {b_all[rc] / max(a_all[rc], 1e-9):.1f}배 더 많이"
+                   + (", 더 일찍 잡아낸다" if earlier else " 잡아낸다"),
+              f"하루 {a_all[dc]:.0f}건 기준 재현율: 현행 {a_all[rc]:.1f}% → 동적 {b_all[rc]:.1f}%, "
+              f"미리 잡은 시간 중앙값: 현행 {a_all['미리 잡은 시간 중앙값(분)']:.0f}분 → 동적 {b_all['미리 잡은 시간 중앙값(분)']:.0f}분 "
+              f"(θ = {th_match:.3f})", y_sub=0.9)
     note = ("주: 테스트 기간(2025년 10~12월) 즉시호출의 배차 전 단계. 동적 규칙 = 5분마다 06단계 모형으로 '다음 30분 내 최종 포기 확률'을\n"
-            "    계산해 처음 θ 이상이 된 시점에 전환 대상으로 표시. 재현율 = 배차 전 최종 포기 콜을 취소 전에 전환 대상으로 잡은 비율.\n"
+            "    계산해 처음 θ 이상이 된 시점에 전환 대상으로 표시. 재현율 = 배차 전 최종 포기 콜을 취소 전에 전환 대상으로 잡은 비율. "
+            "(나)의 동적 규칙은 서울 전체에 같은 θ를 쓰므로 시간대별 전환 건수는 현행 규칙과 다름. 회색 음영 = 야간(20~01시).\n"
             "    조기 탐지 성능과 운영 부담만 비교한 것이며, 전환이 실제로 포기를 줄인다는 인과 효과는 추정하지 않음.\n"
             "    바우처·임차택시 공급량과 비용 자료가 없어 전환 대상을 실제로 처리할 수 있는지는 알 수 없음.")
     save_fig(fig, "fig_07_policy.png", note=note)
