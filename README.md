@@ -28,7 +28,7 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 | 06 | `src/06_hazard_model.py` LightGBM 이산시간 해저드(fig_05, 부록 fig_A2) | 약 7분 |
 | 07 | `src/07_equity_map.py` 동×시간대 포기·승차 지도(fig_06, 부록 fig_A3) | 약 5초 |
 | 08 | `src/08_policy_simulation.py` 현행 60분 규칙 vs 동적 규칙(fig_07) | 약 2분 |
-| 합계 | | 약 11분 (첫 실행, CSV 파싱 포함) |
+| 합계 | | 약 10분 15초 (2026-10-06 전체 재실행 실측 612.8초. 첫 실행이면 CSV 파싱·경계 다운로드 약 30초 추가) |
 
 \* Windows 11 PC 기준 측정값. 이후 단계가 추가되면 갱신한다.
 
