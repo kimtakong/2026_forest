@@ -11,6 +11,7 @@
   정밀도 = 전환 대상 중 실제 배차 전 최종 포기 비율, 불필요 전환 = 전환 대상 중 전환 후 10분 안에 배차된 비율
   60분 전에 이미 떠난 비율 = 배차 전 최종 포기 중 취소가 접수 후 60분 전(규칙 A가 구조적으로 못 잡는 몫)
 추가: 배차 전 최종 포기 콜 중, 취소 직전 점검 시점에 모형이 '다음 10분 내 배차 확률 >= 50%'로 본 비율
+      규칙 B의 전환 시점 분포(접수 직후 0분에 표시된 비율 등), 60분 전에 떠난 비율의 연간(1~12월) 값
 해석: 조기 탐지 성능과 운영 부담만 보고한다. "전환하면 포기가 X% 줄어든다" 같은 인과 주장은 하지 않는다.
       바우처·임차택시 공급량과 비용 자료가 없어, 전환 대상을 실제로 처리할 수 있는지는 알 수 없다(한계).
 출력: outputs/tables/policy_compare.csv, policy_theta_curve.csv, outputs/figures/fig_07_policy.png
@@ -114,10 +115,28 @@ def main():
         for th in [0.05, 0.10, 0.15, 0.20, 0.30]:
             rows.append({"구분": "2 θ별 규칙 B", "집단": g, "규칙": "B 동적", "θ": th,
                          **metrics(test, first_flag(chk, th, len(test)), m, n_days)})
+    # 연간(1~12월) 즉시호출 전체의 배차 전 최종 포기(보고서 결과 3이 인용하는 기준)
+    hr_all = imm.t_request.dt.hour
+    ab_year = {"전체": imm[imm.E1_ab == 2], "야간(20~01시)": imm[(imm.E1_ab == 2) & hr_all.isin(NIGHT_HOURS)]}
     for g, m in groups.items():
         ab = (E == 2) & m
         rows.append({"구분": "3 구조적 한계", "집단": g, "규칙": "A 현행",
-                     "지표": "배차 전 최종 포기 중 접수 후 60분 전에 이미 떠난 비율%", "값": (T[ab] < RULE_A_MIN).mean() * 100})
+                     "지표": "배차 전 최종 포기 중 접수 후 60분 전에 이미 떠난 비율% [평가 기간 10~12월]",
+                     "값": (T[ab] < RULE_A_MIN).mean() * 100})
+        rows.append({"구분": "3 구조적 한계", "집단": g, "규칙": "A 현행",
+                     "지표": "배차 전 최종 포기 중 접수 후 60분 전에 이미 떠난 비율% [연간 1~12월]",
+                     "값": (ab_year[g].T1 < RULE_A_MIN).mean() * 100})
+        # 규칙 B(같은 운영 부담 θ)가 전환 대상으로 표시하는 시점: 대부분 접수 직후다
+        fb = flag_b[~np.isnan(flag_b) & m]
+        fc = flag_b[~np.isnan(flag_b) & m & (E == 2) & (flag_b < T)]
+        for name, val in [("전환 대상 중 접수 직후(0분)에 표시된 비율%", (fb == 0).mean() * 100),
+                          ("전환 대상 중 5~10분에 표시된 비율%", ((fb >= 5) & (fb <= 10)).mean() * 100),
+                          ("전환 대상 중 15~30분에 표시된 비율%", ((fb >= 15) & (fb <= 30)).mean() * 100),
+                          ("전환 대상 중 30분 넘어 표시된 비율%", (fb > 30).mean() * 100),
+                          ("전환 시점 p90(분)", np.percentile(fb, 90)),
+                          ("취소 전에 잡은 최종 포기 중 접수 직후(0분)에 표시된 비율%", (fc == 0).mean() * 100)]:
+            rows.append({"구분": "5 동적 규칙의 전환 시점(같은 운영 부담 θ)", "집단": g, "규칙": "B 동적", "θ": th_match,
+                         "지표": name, "값": val})
         # 취소 직전 점검 시점(취소가 일어난 5분 구간의 시작)에서 '다음 10분 배차 확률 >= 50%'
         last = chk.merge(pd.DataFrame({"i": np.where(ab)[0], "b": np.floor(T[ab] / F.BIN).astype(int)}), on=["i", "b"])
         rows.append({"구분": "4 곧 배차될 상황에서 떠남", "집단": g, "규칙": "모형",
@@ -125,7 +144,7 @@ def main():
                      "값": (last.p_d10 >= 0.5).mean() * 100})
         rows.append({"구분": "4 곧 배차될 상황에서 떠남", "집단": g, "규칙": "모형",
                      "지표": "같은 콜들의 취소 직전 '다음 10분 배차 확률' 중앙값%", "값": last.p_d10.median() * 100})
-    t = pd.DataFrame(rows)
+    t = pd.DataFrame(rows).sort_values("구분", kind="stable")
     save_table(t.round(3), "policy_compare.csv")
     pd.set_option("display.width", 250)
     print(t.drop(columns=["전환 대상 콜 수", "배차 전 최종 포기 콜 수"], errors="ignore").round(2).to_string(index=False))

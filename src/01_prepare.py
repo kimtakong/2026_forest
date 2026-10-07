@@ -242,6 +242,10 @@ def canonical_counts(raw, df):
     n_night, n_day = int(hr.isin(NIGHT_HOURS).sum()), int(hr.isin(DAY_HOURS).sum())
     add("imm_night_n", "분석 대상 상태", "야간(20~01시) 즉시호출", n_night,
         f"즉시호출의 {n_night / len(imm) * 100:.2f}%. 접수 20:00~01:59")
+    nd = imm[hr.isin(NIGHT_HOURS) & (imm.E1 == 1)]
+    add("imm_night_dispatch", "분석 사건", "야간(20~01시) 즉시호출 배차(E1=1)", len(nd))
+    add("imm_night_dispatch_rental", "분석 사건", "그중 임차택시 배차", (nd.vehicle == "임차택시").sum(),
+        "차량구분 = 배정 차종(00단계 1번). 야간 임차택시 배차는 사실상 0")
     add("imm_day_n", "분석 대상 상태", "주간(10~14시) 즉시호출", n_day,
         f"즉시호출의 {n_day / len(imm) * 100:.2f}%. 접수 10:00~14:59")
     t = pd.DataFrame(rows)
