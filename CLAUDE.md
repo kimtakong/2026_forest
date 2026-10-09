@@ -164,6 +164,7 @@
 | 06 | `06_hazard_model.py` | 5분 구간 person-period 데이터, **LightGBM multiclass**(none / dispatch / cancel_before_dispatch). 구간별 원인별 해저드 → CIF와 조건부 잔여대기 복원. 평가와 SHAP | `models/lgbm_stage1.txt`, `fig_05_shap.png`, `tables/model_metrics.csv` |
 | 07 | `07_equity_map.py` | 지도 단위 423곳 × 시간대(주간·저녁·야간)별 **60분 내 최종 포기·승차 누적확률**(경쟁위험). 작은 칸은 같은 구 값 쪽으로 수축(w = n/(n+50)), 20건 미만은 회색 | `fig_06_equity_map.png`(야간. 좌: 선행연구 방식 naive KM 60분 내 승차 / 우: 경쟁위험 60분 내 승차, 같은 색 척도, 50건 이상·50% 미만 굵은 테두리), 부록 `fig_A3`(주간 vs 야간 포기), `tables/dong_hour_abandon.csv`, 상위·하위 10곳 표 |
 | 08 | `08_policy_simulation.py` | **현행 60분 규칙 vs 동적 규칙** 비교(9절) | `fig_07_policy.png`, `tables/policy_compare.csv` |
+| 08b | `08b_policy_baselines.py` | 08 확장(2026-10-09). 08과 같은 틀로 **단순 규칙과 비교**: R0 무작위, R1 야간 일괄, R2 룩업표(학습 구간 구×접수 시각 포기율), R3 모형 접수 시점 1회, A, B. 하루 건수를 A와 맞춘 재현율, 수락률 시나리오(수락자는 포기하지 않는다는 가정의 상한), 하루 전환 상한 N, 안내 범위(학습 분위수의 테스트 적중률). 결과: 접수 시점 개입이 핵심이고 5분 재점검의 추가 이득은 작다 | `fig_07_policy.png`(기준선 추가), 부록 `fig_A4`, `tables/policy_baselines.csv`, `policy_acceptance.csv`, `guidance_coverage.csv` |
 | 09 (선택) | `09_deadhead_carbon.py` | 배차 후 취소 67,727건의 헛걸음 운행에 따른 배출량을 가정치로 추정(탄소중립 키워드). 가정은 표에 명시 | `tables/deadhead_carbon.csv` |
 
 보고서에는 그림을 최대 6~7개만 쓴다. 우선순위는 fig_03 > fig_06 > fig_04 > fig_07 > fig_02 > fig_05 > fig_01.
@@ -281,6 +282,7 @@ Output: for each rule -> flags per hour, recall of eventual cancellations,
   - **조기 탐지 성능:** 결국 취소된 콜을 각 규칙이 얼마나 많이, 얼마나 일찍 잡아내는가
   - **운영 부담:** 시간대별 전환 대상 건수
 - 현행 60분 규칙은 취소 시각 중앙값(약 11분)보다 훨씬 늦다. 60분 전에 이미 포기한 비율이 얼마인지 반드시 수치로 낸다.
+- **단순 규칙과 비교(08b)한 결과를 그대로 보고한다.** 같은 하루 건수에서 룩업표 26.8%, 접수 시점 모형 37.6%, 5분 재점검 B 39.0%, 현행 11.6%다. 따라서 핵심은 "접수 시점 개입"이고, 룩업표로 시작할 수 있다. "5분마다 재점검하는 동적 설계가 핵심"이라고 쓰지 않는다(추가 이득 +1.4%p).
 - 임차택시가 이미 시스템 안에 있다(배차의 약 21%). 임차택시 배차가 늘어난 시간대에 취소가 줄었는지를 기술적으로 보이는 것은 좋다. 단, 인과로 표현하지 않는다.
 
 ## 10. 작업 시작 전 데이터에서 먼저 확인할 것

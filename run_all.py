@@ -23,6 +23,7 @@ STEPS = [
     ("06", "06_hazard_model.py"),
     ("07", "07_equity_map.py"),
     ("08", "08_policy_simulation.py"),
+    ("08b", "08b_policy_baselines.py"),
     ("09", "09_deadhead_carbon.py"),
 ]
 

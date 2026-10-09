@@ -28,6 +28,7 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 | 06 | `src/06_hazard_model.py` LightGBM 이산시간 해저드(fig_05, 부록 fig_A2) | 약 7~15분(PC 부하에 따라 다름) |
 | 07 | `src/07_equity_map.py` 동×시간대 포기·승차 지도(fig_06, 부록 fig_A3) | 약 5초 |
 | 08 | `src/08_policy_simulation.py` 현행 60분 규칙 vs 동적 규칙(fig_07) | 약 2분 |
+| 08b | `src/08b_policy_baselines.py` 단순 규칙(무작위·야간 일괄·룩업표·접수 시점 모형)과 비교, 수락률·안내 범위(fig_07 기준선, 부록 fig_A4) | 약 3~4분 |
 | 합계 | | 약 10~19분 (2026-10-06 실측 612.8초, 1,116.0초. 첫 실행이면 CSV 파싱·경계 다운로드 약 30초 추가) |
 
 \* Windows 11 PC 기준 측정값. 이후 단계가 추가되면 갱신한다.
