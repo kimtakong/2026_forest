@@ -309,7 +309,7 @@ admdongkor의 시점별 행정동 색인(1975~2025)과 비교했다. 25개 구 �
 
 - 십분위 보정도는 배차·최종 포기 모두 대각선 가까이에 있다(fig_A2).
 
-**기준선 (b): 승차 완료 건만 학습한 RandomForest(calltaxi-DA 방식)의 한계** (`rf_underprediction.csv`)
+**기준선 (b): 승차 완료 건만 학습한 RandomForest([calltaxi-DA](https://github.com/calltaxi-DA/calltaxi-DA) 방식, Pull Request #55)의 한계** (`rf_underprediction.csv`)
 - 승차 전체에서는 평균 오차가 거의 없다(과소예측 +1.0분, MAE 13.1분).
 - **실제 대기가 60분을 넘은 승차자는 평균 22.3분, 상위 10%는 35.8분 과소예측**한다.
 - **배차 전 최종 포기 30,060건**에 대해 RF는 대기 중앙값을 58분으로 예측하고, 53%를 "60분 안에 탄다"고 본다.

@@ -9,7 +9,8 @@
 월 피처 : 테스트 월은 학습에 없으므로, 월을 넣은 모형과 뺀 모형을 검증 손실로 골라 쓴다.
 평가    : 테스트 콜마다 접수 시점(s=0) 피처로 120분까지의 원인별 CIF를 예측(미래 부하는 알 수 없어 접수 시점 값으로 고정).
           30·60분 원인별 AUC, Brier, 5~120분 integrated Brier score, 십분위 보정도.
-기준선  : (a) 경과 구간 x 접수 시각만 쓴 경험적 해저드  (b) 승차 완료 건만 학습한 RandomForest 회귀(calltaxi-DA 방식)
+기준선  : (a) 경과 구간 x 접수 시각만 쓴 경험적 해저드  (b) 승차 완료 건만 학습한 RandomForest 회귀
+          (calltaxi-DA 방식, https://github.com/calltaxi-DA/calltaxi-DA Pull Request #55)
 SHAP    : LightGBM 내장 TreeSHAP(pred_contrib). 배차·최종 포기 클래스별 평균 |SHAP| 상위 10개.
 출력    : models/lgbm_stage1.txt, outputs/tables/model_metrics.csv, calibration_deciles.csv, rf_underprediction.csv,
           shap_top10.csv, case_examples.csv, outputs/figures/fig_05_shap.png, fig_A2_calibration.png

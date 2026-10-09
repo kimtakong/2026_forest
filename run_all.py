@@ -13,6 +13,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent / "src"
 STEPS = [
+    ("chk", "check_inputs.py"),
     ("dl", "download_boundary.py"),
     ("00", "00_data_checks.py"),
     ("01", "01_prepare.py"),

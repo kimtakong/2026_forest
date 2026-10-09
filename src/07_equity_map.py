@@ -15,8 +15,8 @@ import numpy as np
 import pandas as pd
 
 from survival import discrete_cif
-from utils import (CALLS, COLOR, DATA_PROC, FS, HOUR_GROUPS, MAP_UNITS, apply_style, clean, draw_figures, fig_title,
-                   fig_width, load_counts, save_fig, save_table)
+from utils import (CALLS, COLOR, DATA_PROC, FS, HOUR_GROUPS, MAP_UNITS, SOURCE_NOTE, apply_style, clean, draw_figures,
+                   fig_title, fig_width, load_counts, save_fig, save_table)
 
 H = 60
 M_SHRINK = 50
@@ -207,7 +207,8 @@ def fig_day_night(t, units, gu):
     note = (f"주: 즉시호출, 경쟁위험(1분 이산 Aalen-Johansen) 60분 내 최종 포기 누적확률.\n"
             f"    색은 같은 구·같은 시간대 값 쪽으로 수축(w = n/(n+{M_SHRINK})), 회색 = 콜 {N_GRAY}건 미만. 중앙값은 콜 {N_FLAG}건 이상인 동의 원값 기준. "
             "최종 포기 = 취소 후 30분 안에 같은 출발동·목적동·장애유형 재접수가 없는 취소.")
-    save_fig(fig, "fig_A3_abandon_day_night.png", note=note)
+    save_fig(fig, "fig_A3_abandon_day_night.png", note=note,
+             source=SOURCE_NOTE + ". 행정동 경계: 통계청 SGIS, vuski/admdongkor(CC BY 4.0)를 지도 단위로 합쳐 사용")
     plt.close(fig)
 
 

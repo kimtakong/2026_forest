@@ -24,6 +24,7 @@ RAW_TRIPS = DATA_RAW / "서울시설공단_장애인콜택시 탑승내역_20251
 RAW_OFFICIAL_WAIT = DATA_RAW / "서울시설공단_장애인콜택시 시간대별 대기시간_20251231.csv"
 RAW_PURPOSE = DATA_RAW / "서울시설공단_장애인콜택시 이용목적_20240502.csv"        # CP949
 RAW_DISABILITY = DATA_RAW / "서울시설공단_장애인콜택시 장애종류_20250528.csv"     # CP949
+INPUT_MANIFEST = DOCS / "input_manifest.csv"   # 원본 CSV 기준값(크기·줄 수·SHA-256). check_inputs.py
 RAW_CACHE = DATA_PROC / "raw_trips.parquet"   # 원본을 타입만 바꿔 저장한 캐시
 CALLS = DATA_PROC / "calls.parquet"
 DONG_MAPPING = DATA_PROC / "dong_mapping.csv"
@@ -271,12 +272,20 @@ def _write_captions_md(reg: dict):
     CAPTIONS_MD.write_text("\n".join(lines), encoding="utf-8")
 
 
+_font_warned = False
+
+
 def setup_korean_font() -> str:
-    """matplotlib 한글 폰트(Windows: Malgun Gothic, 없으면 NanumGothic)."""
+    """matplotlib 한글 폰트(Windows: Malgun Gothic, 없으면 NanumGothic). 하나도 없으면 한 번 경고한다."""
+    global _font_warned
     import matplotlib
     from matplotlib import font_manager
     names = {f.name for f in font_manager.fontManager.ttflist}
     font = next((f for f in ["Malgun Gothic", "NanumGothic", "AppleGothic"] if f in names), "DejaVu Sans")
+    if font == "DejaVu Sans" and not _font_warned:
+        print("  [경고] 한글 폰트(Malgun Gothic, NanumGothic, AppleGothic)가 없어 그림의 한글이 깨진다. "
+              "README '실행' 절의 폰트 안내를 본다.")
+        _font_warned = True
     matplotlib.rcParams["font.family"] = font
     matplotlib.rcParams["axes.unicode_minus"] = False
     return font

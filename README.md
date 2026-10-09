@@ -18,6 +18,7 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 
 | 단계 | 스크립트 | 실행 시간* |
 |---|---|---:|
+| chk | `src/check_inputs.py` 원본 CSV가 분석에 쓴 파일과 같은지 확인(크기·줄 수·SHA-256) | 몇 초 |
 | dl | `src/download_boundary.py` 행정동 경계 내려받기(첫 실행만) | 약 20초 |
 | 00 | `src/00_data_checks.py` 데이터 확인, 동 대응표 | 약 6초 |
 | 01 | `src/01_prepare.py` 분석용 콜 테이블, 제외 로그, 재접수 판별, 기준 건수표 | 약 30초 |
@@ -38,13 +39,22 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 - LightGBM은 `deterministic=True`, `force_row_wise=True`, `num_threads=16`으로 학습한다.
 - 같은 입력으로 06단계를 두 번 실행하면 모델 파일(`models/lgbm_stage1.txt`)까지 바이트 단위로 같다.
 - 전체 재실행 시 표·그림도 같게 재현된다. 다르게 나오는 것은 학습 시간 기록뿐이다.
+  - 그림은 설치된 한글 폰트가 다르면 글자 모양만 달라진다.
+- 입력 원본은 첫 단계(`chk`)가 `docs/input_manifest.csv`의 기준값과 비교한다. 다르면 경고를 내고 계속 실행한다(아래 "데이터" 절).
+
+**한글 폰트:**
+- 그림에 한글이 들어가므로 맑은 고딕(Windows 기본), AppleGothic(macOS 기본), 나눔고딕 중 하나가 있어야 한다.
+- Linux는 `sudo apt install fonts-nanum`으로 나눔고딕을 설치한다. 그다음 matplotlib 폰트 캐시(`~/.cache/matplotlib`)를 지우고 다시 실행한다.
+- 폰트가 없으면 실행 중에 경고가 나오고 그림의 한글이 깨진다. 표와 모델에는 영향이 없다.
 
 **06단계 표본과 `--sample`:**
 - 본 실행은 **표본추출 없이 전체**로 학습한다(RAM 63GB PC에서 확인).
   - 학습(1~8월): 콜 1,003,367건, person-period 4,304,023행
   - 검증(9월): 콜 137,567건, person-period 727,156행
   - 테스트(10~12월): 콜 387,113건, 테스트는 언제나 전체
+  - 전체 학습은 메모리를 많이 쓴다. RAM이 부족한 PC에서는 아래 `--sample`로 시연한다.
 - 기준선 (b) RandomForest만 학습 구간 승차 콜에서 30만 건을 무작위로 뽑아 학습한다(시드 42).
+  - 기준선 (b)는 [calltaxi-DA](https://github.com/calltaxi-DA/calltaxi-DA)(Pull Request #55, 2026-09)의 방식을 따랐다. 승차한 호출의 접수→승차 대기시간을 RandomForest로 회귀 예측하는 방식이다.
 - `python run_all.py --sample` 또는 `python src/06_hazard_model.py --sample`은 학습·검증·테스트 콜을 (월 × 시 × 출발구) 층화로 10%만 써서 약 50초에 시연한다.
   - 결과는 본 결과를 덮어쓰지 않도록 `outputs/sample/`, `models/sample/`에 저장된다.
 
@@ -80,6 +90,15 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 | `서울시설공단_장애인콜택시 이용목적_20240502.csv` | CP949 |
 | `서울시설공단_장애인콜택시 장애종류_20250528.csv` | CP949 |
 
+- **취득 방법:** 위 URL의 공공데이터포털 파일데이터 페이지에서 CSV를 직접 내려받았다(2026-10-06). API나 크롤링 같은 자동 수집은 쓰지 않았다.
+- **주요 변수:**
+  - 탑승내역(15개 열): 접수일시·예정일시·배차일시·승차일시·하차일시·취소일시(밀리초까지 기록), 출발구·출발동·목적구·목적동(행정동), 이용목적, 요금(원), 승차거리(m), 차량구분(배정 차종: 특장차·임차택시), 장애유형
+  - 이용자 ID, 휠체어 이용 여부, 차량 위치는 없다.
+  - 시간대별 대기시간: 시설명, 일자, 시간대, 대기시간평균(분). 이용목적·장애종류: 코드표(참고용)
+- **입력 파일 확인:** `src/check_inputs.py`가 `datas/`의 파일 크기·줄 수·SHA-256을 `docs/input_manifest.csv`와 비교한다.
+  - 기준값은 분석에 쓴 원본이 있는 PC에서 `python src/check_inputs.py --write`로 기록한다.
+  - 포털 파일이 갱신돼 값이 다르면 경고를 낸다. 이때 결과가 보고서 숫자와 다를 수 있다.
+
 ### 행정동 경계 — 스크립트로 자동 다운로드
 
 - 출처: [vuski/admdongkor](https://github.com/vuski/admdongkor) — 대한민국 행정동 경계 시계열(1975~현재)
@@ -96,9 +115,9 @@ python run_all.py --sample           # 오래 걸리는 단계를 표본으로 �
 ```
 datas/            원본 CSV, 행정동 경계 (git 제외)
 data_processed/   가공본: raw_trips.parquet, calls.parquet, dong_mapping.csv, map_units.parquet (git 제외)
-src/              utils.py(경로·상수), geo.py(경계·동 대응), download_boundary.py, 00~09 단계 스크립트
+src/              utils.py(경로·상수), geo.py(경계·동 대응), download_boundary.py, check_inputs.py(원본 확인), 00~09 단계 스크립트
 outputs/tables/   결과 표,  outputs/figures/  결과 그림
-docs/             data_checks.md(데이터 확인), ai_log.md(AI 사용 기록)
+docs/             data_checks.md(데이터 확인), ai_log.md(AI 사용 기록), input_manifest.csv(원본 CSV 기준값)
 ```
 
 ## 한계
